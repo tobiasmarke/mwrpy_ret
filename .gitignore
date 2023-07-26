@@ -1,0 +1,8 @@
+venv/
+*.egg-info*
+__pycache__
+.idea
+*.csv
+*checkpoint.py
+build
+dist

@@ -1,0 +1,68 @@
+[project]
+name = "mwrpy_ret"
+description = "Repository for Microwave Radiometer Retrieval Derivation"
+authors = [{name = "Tobias Marke", email = "tobias.marke@uni-koeln.de"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "matplotlib",
+  "metpy",
+  "netCDF4",
+  "pandas",
+  "pyyaml",
+  "scipy",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = ["mypy", "pylint", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
+
+[project.urls]
+Homepage = "https://github.com/tobiasmarke/mwrpy_ret"
+Repository = "https://github.com/tobiasmarke/mwrpy_ret"
+Changelog = "https://github.com/tobiasmarke/mwrpy_ret/blob/main/CHANGELOG.md"
+
+[tool.mypy]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["matplotlib.*", "metpy.*", "netCDF4.*", "pandas.*", "scipy.*"]
+ignore_missing_imports = true
+
+[tool.pylint]
+max-line-length = 88
+ignored-modules = ["metpy", "netCDF4", "numpy", "scipy"]
+disable = [
+  "duplicate-code",
+  "fixme",
+  "invalid-name",
+  "logging-fstring-interpolation",
+  "logging-not-lazy",
+  "missing-class-docstring",
+  "missing-function-docstring",
+  "missing-module-docstring",
+  "too-few-public-methods",
+  "too-many-arguments",
+  "too-many-branches",
+  "too-many-function-args",
+  "too-many-instance-attributes",
+  "too-many-lines",
+  "too-many-locals",
+  "too-many-statements",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "mwrpy_ret.version.__version__"}
+
+[tool.tomlsort]
+trailing_comma_inline_array = true
+sort_inline_arrays = true
