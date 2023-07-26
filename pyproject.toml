@@ -17,6 +17,7 @@ dependencies = [
   "matplotlib",
   "metpy",
   "netCDF4",
+  "numba",
   "pandas",
   "pyyaml",
   "scipy",
@@ -35,12 +36,12 @@ Changelog = "https://github.com/tobiasmarke/mwrpy_ret/blob/main/CHANGELOG.md"
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["matplotlib.*", "metpy.*", "netCDF4.*", "pandas.*", "scipy.*"]
+module = ["matplotlib.*", "metpy.*", "netCDF4.*", "numba.*", "numpy.*", "pandas.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pylint]
 max-line-length = 88
-ignored-modules = ["metpy", "netCDF4", "numpy", "scipy"]
+ignored-modules = ["metpy", "netCDF4", "numba", "numpy", "scipy"]
 disable = [
   "duplicate-code",
   "fixme",
