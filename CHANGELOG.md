@@ -1,3 +1,7 @@
+## 0.1.3 – 2023-07-26
+
+- Publish project workflow
+
 ## 0.1.2 – 2023-07-26
 
 - Project update
