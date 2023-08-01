@@ -20,7 +20,7 @@ dependencies = [
   "numba",
   "pandas",
   "pyyaml",
-  "scipy",
+  "xarray",
 ]
 dynamic = ["version"]
 
@@ -36,12 +36,12 @@ Changelog = "https://github.com/tobiasmarke/mwrpy_ret/blob/main/CHANGELOG.md"
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["matplotlib.*", "metpy.*", "netCDF4.*", "numba.*", "numpy.*", "pandas.*", "scipy.*"]
+module = ["matplotlib.*", "metpy.*", "netCDF4.*", "numba.*", "numpy.*", "pandas.*", "xarray.*"]
 ignore_missing_imports = true
 
 [tool.pylint]
 max-line-length = 88
-ignored-modules = ["metpy", "netCDF4", "numba", "numpy", "scipy"]
+ignored-modules = ["metpy", "netCDF4", "numba", "numpy", "xarray"]
 disable = [
   "duplicate-code",
   "fixme",

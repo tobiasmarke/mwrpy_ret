@@ -1,5 +1,5 @@
 [TYPECHECK]
-ignored-modules	= numpy, netCDF4, scipy, torch, numba
+ignored-modules	= numpy, netCDF4, torch, numba, xarray, metpy
 
 [MESSAGES CONTROL]
 disable =
@@ -15,6 +15,7 @@ disable =
   too-many-instance-attributes,
   fixme,
   duplicate-code,
+  too-many-branches,
 
 
 [format]

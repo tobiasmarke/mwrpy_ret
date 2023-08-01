@@ -6,3 +6,4 @@ __pycache__
 *checkpoint.py
 build
 dist
+tests/data

@@ -1,6 +1,10 @@
-# coding: utf-8
-import numba
+import json
+import os
+import warnings
+
 import numpy as np
+
+import mwrpy_ret.constants as con
 
 
 def STP_IM10(
@@ -9,6 +13,7 @@ def STP_IM10(
     T_final,
     p_final,
     q_final,
+    LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
     # re-calculate opt. depth for every angle =0: no! (=1: yes is default),
@@ -30,9 +35,9 @@ def STP_IM10(
     mu = np.cos(theta) + 0.025 * np.exp(-11.0 * np.cos(theta))
 
     # ****radiative transfer
-    tau, tau_wv, tau_o2 = TAU_CALC_IM10(z_final, T_final, p_final, q_final, f)
+    tau, tau_wv, tau_o2 = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
 
-    TB = TB_CALC_PL_IM10(T_final, tau, mu, f)
+    TB = TB_CALC(T_final, tau, mu, f)
 
     return (
         TB,  # [K] brightness temperature array of f grid
@@ -42,17 +47,68 @@ def STP_IM10(
     )
 
 
-@numba.jit(cache=True, nopython=True)
-def TAU_CALC_IM10(
+def loadCoeffsJSON(path) -> dict:
+    """Load coefficients required for O2 absorption."""
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf8") as f:
+            try:
+                var_all = dict(**json.load(f))
+                for key in var_all.keys():
+                    var_all[key] = np.asarray(var_all[key])
+            except json.decoder.JSONDecodeError:
+                print(path)
+                raise
+    return dict(**var_all)
+
+
+def dcerror(x, y):
+    """SIXTH-ORDER APPROX TO THE COMPLEX ERROR FUNCTION OF z=X+iY."""
+    a = [
+        122.607931777104326,
+        214.382388694706425,
+        181.928533092181549,
+        93.155580458138441,
+        30.180142196210589,
+        5.912626209773153,
+        0.564189583562615,
+    ]
+    b = [
+        122.607931773875350,
+        352.730625110963558,
+        457.334478783897737,
+        348.703917719495792,
+        170.354001821091472,
+        53.992906912940207,
+        10.479857114260399,
+    ]
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        ZH = np.abs(y) - x * 1j
+        ASUM = (
+            ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
+        ) * ZH + a[0]
+        BSUM = (
+            (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH
+            + b[1]
+        ) * ZH + b[0]
+        w = ASUM / BSUM
+        w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
+        DCERROR = w
+        DCERROR[y < 0] = w2[y < 0]
+        return DCERROR
+
+
+def TAU_CALC(
     z,  # height [m]
     T,  # Temp. [K]
     p,  # press. [Pa]
     rhow,  # abs. hum. [kg m^-3]
+    LWC,  # LWC [kg m^-3]
     f,  # freq. [GHz]
 ):
     """
     Abstract:
-    subroutine to determine optical thichkness tau
+    subroutine to determine optical thickness tau
     at height k (index counting from bottom of zgrid)
     on the basis of Rosenkranz 1998 water vapor and absorption model
     Rayleigh calculations
@@ -90,18 +146,24 @@ def TAU_CALC_IM10(
 
         # ****gas absorption
         # water vapor
-        AWV = ABWVR98_IM10(rhow_mean * 1000.0, T_mean, p_mean / 100, f)
+        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100, f)
         AWV = AWV / 1000.0
 
         # oxygen
-        AO2 = ABO2R98_IM10(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f)
+        AO2 = ABO2_R22(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f)
         AO2 = AO2 / 1000.0
 
         # nitrogen (Rosenkranz O2)
-        AN2 = ABSN2_IM10(T_mean, p_mean / 100, f)
+        AN2 = ABN2_R22(T_mean, p_mean / 100, f)
         AN2 = AN2 / 1000.0
 
-        absg = AWV + AO2 + AN2
+        ALIQ = rewat_ellison(T_mean, f, LWC[kmax - 2 - ii])
+        # ALIQ = abliq(LWC[kmax - 1 - ii], f, T_mean)
+        # if W_mean > 0:
+        #     import pdb
+        #     pdb.set_trace()
+
+        absg = AWV + AO2 + AN2 + ALIQ
 
         abs_all[kmax - 2 - ii, :] = absg
         abs_wv[kmax - 2 - ii, :] = AWV
@@ -124,8 +186,7 @@ def TAU_CALC_IM10(
     return tau, tau_wv, tau_o2  # total opt. depth  # WV opt. depth  # O2 opt. depth
 
 
-@numba.jit(cache=True, nopython=True)
-def ABWVR98_IM10(
+def ABWV_R22(
     RHO,  # abs. humidity in gm-3
     T,  # temp. in K
     P,  # pressure in hPa
@@ -157,199 +218,99 @@ def ABWVR98_IM10(
          A.BAUER ET AL.ASA WORKSHOP (SEPT. 1989) (380GHz).
     """
 
+    path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/h2o_list.json"
+    CF = loadCoeffsJSON(path)
+
     # ****number of frequencies
     n_f = len(F)
 
     # ****LOCAL VARIABLES:
-    NLINES = 15
+    NLINES = 16
     DF = np.zeros((2, n_f))
 
-    # ****LINE FREQUENCIES:
-    FL = [
-        22.2351,
-        183.3101,
-        321.2256,
-        325.1529,
-        380.1974,
-        439.1508,
-        443.0183,
-        448.0011,
-        470.8890,
-        474.6891,
-        488.4911,
-        556.9360,
-        620.7008,
-        752.0332,
-        916.1712,
-    ]
-
-    # ****LINE INTENSITIES AT 300K:
-    S1 = [
-        0.1310e-13,
-        0.2273e-11,
-        0.8036e-13,
-        0.2694e-11,
-        0.2438e-10,
-        0.2179e-11,
-        0.4624e-12,
-        0.2562e-10,
-        0.8369e-12,
-        0.3263e-11,
-        0.6659e-12,
-        0.1531e-08,
-        0.1707e-10,
-        0.1011e-08,
-        0.4227e-10,
-    ]
-
-    # ****T COEFF. OF INTENSITIES:
-    B2 = [
-        2.144,
-        0.668,
-        6.179,
-        1.541,
-        1.048,
-        3.595,
-        5.048,
-        1.405,
-        3.597,
-        2.379,
-        2.852,
-        0.159,
-        2.391,
-        0.396,
-        1.441,
-    ]
-
-    # ****T-EXPONENT OF AIR-BROADENING:
-    X = [
-        0.69,
-        0.64,
-        0.67,
-        0.68,
-        0.54,
-        0.63,
-        0.60,
-        0.66,
-        0.66,
-        0.65,
-        0.69,
-        0.69,
-        0.71,
-        0.68,
-        0.70,
-    ]
-
-    # ****AIR-BROADENED WIDTH PARAMETERS AT 300K:
-    W3 = [
-        0.002656,
-        0.00281,
-        0.0023,
-        0.00278,
-        0.00287,
-        0.0021,
-        0.00186,
-        0.00263,
-        0.00215,
-        0.00236,
-        0.0026,
-        0.00321,
-        0.00244,
-        0.00306,
-        0.00267,
-    ]
-
-    # ****SELF-BROADENED WIDTH PARAMETERS AT 300K
-    WS = [
-        0.0127488,
-        0.01491,
-        0.0108,
-        0.0135,
-        0.01541,
-        0.0090,
-        0.00788,
-        0.01275,
-        0.00983,
-        0.01095,
-        0.01313,
-        0.01320,
-        0.01140,
-        0.01253,
-        0.01275,
-    ]
-
-    # ****T-EXPONENT OF SELF-BROADENING:
-    XS = [
-        0.61,
-        0.85,
-        0.54,
-        0.74,
-        0.89,
-        0.52,
-        0.50,
-        0.67,
-        0.65,
-        0.64,
-        0.72,
-        1.0,
-        0.68,
-        0.84,
-        0.78,
-    ]
-
-    if RHO <= 0:
+    if RHO.all() <= 0:
         ALPHA = np.zeros(n_f)
     else:
-        PVAP = RHO * T / 217.0
+        PVAP = RHO * T * 4.615228e-3
         PDA = P - PVAP
-        DEN = 3.335e16 * RHO
         TI = 300.0 / T
-        TI2 = TI**2.5
 
-        # ****CONTINUUM TERMS
-        bf_org = 5.43e-10
-        bs_org = 1.8e-8
-
-        bf_mult = 1.105
-        bs_mult = 0.79
-
-        bf = bf_org * bf_mult
-        bs = bs_org * bs_mult
-
-        CON = (bf * PDA * TI**3 + bs * PVAP * TI**7.5) * PVAP * F * F
+        CON = (
+            (5.9197e-10 * PDA * TI**3 + 1.4162e-8 * PVAP * TI**7.5) * PVAP * F**2
+        )
+        REFTLINE = 296.0
+        TI = REFTLINE / T
+        TILN = np.log(TI)
+        TI2 = np.exp(2.5 * TILN)
 
         # ****ADD RESONANCES
         SUM = np.zeros(n_f)
-
         for I in range(NLINES):
-            WIDTH = W3[I] * PDA * TI ** X[I] + WS[I] * PVAP * TI ** XS[I]
-            WSQ = WIDTH * WIDTH
-            S = S1[I] * TI2 * np.exp(B2[I] * (1.0 - TI))
-            DF[0, :] = F - FL[I]
-            DF[1, :] = F + FL[I]
+            if np.abs(F - CF["FL"][I]).any() < 750.1:
+                WIDTH0 = (CF["W0"][I] / 1000.0) * PDA * TI ** CF["X"][I] + (
+                    CF["W0S"][I] / 1000.0
+                ) * PVAP * TI ** CF["XS"][I]
+                if CF["W2"][I] > 0:
+                    WIDTH2 = (
+                        CF["W2"][I] * PDA * TI ** CF["XW2"][I]
+                        + (CF["W2S"][I] / 1000.0) * PVAP * TI ** CF["XW2S"][I]
+                    )
+                else:
+                    WIDTH2 = 0  # SUM = 0
 
-            # USE CLOUGH'S DEFINITION OF LOCAL LINE CONTRIBUTION
-            BASE = WIDTH / (562500.0 + WSQ)
+                DELTA2 = (CF["D2"][I] / 1000.0) * PDA + (CF["D2S"][I] / 1000.0) * PVAP
+                SHIFTF = (
+                    (CF["SH"][I] / 1000.0)
+                    * PDA
+                    * (1.0 - CF["AAIR"][I] * TILN)
+                    * TI ** CF["XH"][I]
+                )
+                SHIFTS = (
+                    CF["SHS"][I]
+                    * PVAP
+                    * (1.0 - CF["ASELF"][I] * TILN)
+                    * TI ** CF["XHS"][I]
+                )
+                SHIFT = SHIFTF + SHIFTS
+                WSQ = WIDTH0**2
 
-            # DO FOR POSITIVE AND NEGATIVE RESONANCES
-            RES = np.zeros(n_f)
+                S = CF["S1"][I] * TI2 * np.exp(CF["B2"][I] * (1.0 - TI))
+                DF[0, :] = F - CF["FL"][I] - SHIFT
+                DF[1, :] = F + CF["FL"][I] + SHIFT
 
-            for i_n_f in range(n_f):
+                # USE CLOUGH'S DEFINITION OF LOCAL LINE CONTRIBUTION
+                BASE = WIDTH0 / (562500.0 + WSQ)
+
+                # DO FOR POSITIVE AND NEGATIVE RESONANCES
+                RES = np.zeros(n_f)
                 for J in range(2):
-                    if np.abs(DF[J, i_n_f]) < 750.0:
-                        RES[i_n_f] = (
-                            RES[i_n_f] + WIDTH / (DF[J, i_n_f] ** 2 + WSQ) - BASE
+                    if (J == 1) & (WIDTH2 > 0.0):
+                        INDEX1 = np.abs(DF[J, :]) < 10.0 * WIDTH0
+                        INDEX2 = (np.abs(DF[J, :]) < 750) & ~INDEX1
+                        XC = ((WIDTH0 - 1.5 * WIDTH2) + (DF[J] + 1.5 * DELTA2) * 1j) / (
+                            WIDTH2 - DELTA2 * 1j
                         )
+                        XRT = np.sqrt(XC)
+                        PXW = (
+                            1.77245385090551603
+                            * XRT
+                            * dcerror(-np.imag(XRT), np.real(XRT))
+                        )
+                        SD = 2.0 * (1.0 - PXW) / (WIDTH2 - DELTA2 * 1j)
+                        RES[INDEX1] = (RES + np.real(SD) - BASE)[INDEX1]
+                        RES[INDEX2] = (RES + WIDTH0 / (DF[J] ** 2 + WSQ) - BASE)[INDEX2]
+                    else:
+                        INDEX = np.abs(DF[J, :]) < 750
+                        RES[INDEX] = (RES + WIDTH0 / (DF[J] ** 2 + WSQ) - BASE)[INDEX]
 
-            SUM = SUM + S * RES * (F / FL[I]) ** 2
+                SUM = SUM + S * RES * (F / CF["FL"][I]) ** 2
 
-        ALPHA = 0.3183e-4 * DEN * SUM + CON
+        ALPHA = 1.0e-10 * RHO * SUM / (np.pi * 2.9915075e-23) + CON
 
     return ALPHA
 
 
-@numba.jit(cache=True, nopython=True)
-def ABO2R98_IM10(TEMP, PRES, VAPDEN, FREQ):
+def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
     """
     #
     PURPOSE: RETURNS ABSORPTION COEFFICIENT DUE TO OXYGEN IN AIR,
@@ -384,295 +345,46 @@ def ABO2R98_IM10(TEMP, PRES, VAPDEN, FREQ):
 
     LINES ARE ARRANGED 1-,1+,3-,3+,ETC. IN SPIN-ROTATION SPECTRUM
     """
-    F = [
-        118.7503,
-        56.2648,
-        62.4863,
-        58.4466,
-        60.3061,
-        59.5910,
-        59.1642,
-        60.4348,
-        58.3239,
-        61.1506,
-        57.6125,
-        61.8002,
-        56.9682,
-        62.4112,
-        56.3634,
-        62.9980,
-        55.7838,
-        63.5685,
-        55.2214,
-        64.1278,
-        54.6712,
-        64.6789,
-        54.1300,
-        65.2241,
-        53.5957,
-        65.7648,
-        53.0669,
-        66.3021,
-        52.5424,
-        66.8368,
-        52.0214,
-        67.3696,
-        51.5034,
-        67.9009,
-        368.4984,
-        424.7632,
-        487.2494,
-        715.3931,
-        773.8397,
-        834.1458,
-    ]
 
-    S300 = [
-        0.2936e-14,
-        0.8079e-15,
-        0.2480e-14,
-        0.2228e-14,
-        0.3351e-14,
-        0.3292e-14,
-        0.3721e-14,
-        0.3891e-14,
-        0.3640e-14,
-        0.4005e-14,
-        0.3227e-14,
-        0.3715e-14,
-        0.2627e-14,
-        0.3156e-14,
-        0.1982e-14,
-        0.2477e-14,
-        0.1391e-14,
-        0.1808e-14,
-        0.9124e-15,
-        0.1230e-14,
-        0.5603e-15,
-        0.7842e-15,
-        0.3228e-15,
-        0.4689e-15,
-        0.1748e-15,
-        0.2632e-15,
-        0.8898e-16,
-        0.1389e-15,
-        0.4264e-16,
-        0.6899e-16,
-        0.1924e-16,
-        0.3229e-16,
-        0.8191e-17,
-        0.1423e-16,
-        0.6494e-15,
-        0.7083e-14,
-        0.3025e-14,
-        0.1835e-14,
-        0.1158e-13,
-        0.3993e-14,
-    ]
-
-    BE = [
-        0.009,
-        0.015,
-        0.083,
-        0.084,
-        0.212,
-        0.212,
-        0.391,
-        0.391,
-        0.626,
-        0.626,
-        0.915,
-        0.915,
-        1.260,
-        1.260,
-        1.660,
-        1.665,
-        2.119,
-        2.115,
-        2.624,
-        2.625,
-        3.194,
-        3.194,
-        3.814,
-        3.814,
-        4.484,
-        4.484,
-        5.224,
-        5.224,
-        6.004,
-        6.004,
-        6.844,
-        6.844,
-        7.744,
-        7.744,
-        0.048,
-        0.044,
-        0.049,
-        0.145,
-        0.141,
-        0.145,
-    ]
-    # WIDTHS IN MHZ/MB
+    path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/o2_list.json"
+    CF = loadCoeffsJSON(path)
 
     WB300 = 0.56
-    X = 0.8
-    W300 = [
-        1.63,
-        1.646,
-        1.468,
-        1.449,
-        1.382,
-        1.360,
-        1.319,
-        1.297,
-        1.266,
-        1.248,
-        1.221,
-        1.207,
-        1.181,
-        1.171,
-        1.144,
-        1.139,
-        1.110,
-        1.108,
-        1.079,
-        1.078,
-        1.05,
-        1.05,
-        1.02,
-        1.02,
-        1.00,
-        1.00,
-        0.97,
-        0.97,
-        0.94,
-        0.94,
-        0.92,
-        0.92,
-        0.89,
-        0.89,
-        1.92,
-        1.92,
-        1.92,
-        1.81,
-        1.81,
-        1.81,
-    ]
-
-    Y300 = [
-        -0.0233,
-        0.2408,
-        -0.3486,
-        0.5227,
-        -0.5430,
-        0.5877,
-        -0.3970,
-        0.3237,
-        -0.1348,
-        0.0311,
-        0.0725,
-        -0.1663,
-        0.2832,
-        -0.3629,
-        0.3970,
-        -0.4599,
-        0.4695,
-        -0.5199,
-        0.5187,
-        -0.5597,
-        0.5903,
-        -0.6246,
-        0.6656,
-        -0.6942,
-        0.7086,
-        -0.7325,
-        0.7348,
-        -0.7546,
-        0.7702,
-        -0.7864,
-        0.8083,
-        -0.8210,
-        0.8439,
-        -0.8529,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ]
-
-    V = [
-        0.0079,
-        -0.0978,
-        0.0844,
-        -0.1273,
-        0.0699,
-        -0.0776,
-        0.2309,
-        -0.2825,
-        0.0436,
-        -0.0584,
-        0.6056,
-        -0.6619,
-        0.6451,
-        -0.6759,
-        0.6547,
-        -0.6675,
-        0.6135,
-        -0.6139,
-        0.2952,
-        -0.2895,
-        0.2654,
-        -0.2590,
-        0.3750,
-        -0.3680,
-        0.5085,
-        -0.5002,
-        0.6206,
-        -0.6091,
-        0.6526,
-        -0.6393,
-        0.6640,
-        -0.6475,
-        0.6729,
-        -0.6545,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ]
-
+    X = 0.754
     TH = 300.0 / TEMP
     TH1 = TH - 1.0
     B = TH**X
-    PRESWV = VAPDEN * TEMP / 217.0
+    PRESWV = VAPDEN * TEMP / 216.68
     PRESDA = PRES - PRESWV
-    DEN = 0.001 * (PRESDA * B + 1.1 * PRESWV * TH)
-    DENS = 0.001 * (PRESDA + 1.1 * PRESWV) * TH
+    DEN = 0.001 * (PRESDA * B + 1.2 * PRESWV * TH)
     DFNR = WB300 * DEN
-    SUM = 1.6e-17 * FREQ * FREQ * DFNR / (TH * (FREQ * FREQ + DFNR * DFNR))
+    PE2 = DEN * DEN
 
-    for K in range(40):
-        if K == 0:
-            DF = W300[0] * DENS
-        else:
-            DF = W300[K] * DEN
-        Y = 0.001 * PRES * B * (Y300[K] + V[K] * TH1)
-        STR = S300[K] * np.exp(-BE[K] * TH1)
-        SF1 = (DF + (FREQ - F[K]) * Y) / ((FREQ - F[K]) ** 2 + DF * DF)
-        SF2 = (DF - (FREQ + F[K]) * Y) / ((FREQ + F[K]) ** 2 + DF * DF)
-        SUM = SUM + STR * (SF1 + SF2) * (FREQ / F[K]) ** 2
+    SUM = 1.584e-17 * FREQ * FREQ * DFNR / (TH * (FREQ * FREQ + DFNR * DFNR))
 
-    O2ABS = 0.5034e12 * SUM * PRESDA * TH**3 / 3.14159
+    for K in range(len(CF["F"])):
+        Y = DEN * (CF["Y0"][K] + CF["Y1"][K] * TH1)
+        DNU = PE2 * (CF["DNU0"][K] + CF["DNU1"][K])
+        GFAC = 1.0 + PE2 * (CF["G0"][K] + CF["G1"][K] * TH1)
+        DF = CF["W300"][K] * DEN
+        STR = CF["S300"][K] * np.exp(-CF["BE"][K] * TH1)
+        DEL1 = FREQ - CF["F"][K] - DNU
+        DEL2 = FREQ + CF["F"][K] + DNU
+        D1 = DEL1 * DEL1 + DF * DF
+        D2 = DEL2 * DEL2 + DF * DF
+        SF1 = (DF * GFAC + DEL1 * Y) / D1
+        SF2 = (DF * GFAC - DEL2 * Y) / D2
+
+        SUM = SUM + STR * (SF1 + SF2) * (FREQ / CF["F"][K]) ** 2
+
+    O2ABS = 1.6097e11 * SUM * PRESDA * TH**3
+    O2ABS[O2ABS < 0] = 0
+    O2ABS = O2ABS * 1.004  # increase absorption to match Koshelev2017
 
     return O2ABS
 
 
-@numba.jit(cache=True, nopython=True)
-def ABSN2_IM10(T, P, F):
+def ABN2_R22(T, P, F):
     """
     ****ABSN2 = ABSORPTION COEFFICIENT DUE TO NITROGEN IN AIR (NEPER/KM)
     T = TEMPERATURE (K)
@@ -680,35 +392,137 @@ def ABSN2_IM10(T, P, F):
     F = FREQUENCY (GHZ)
     """
     TH = 300.0 / T
-    ALPHA = 6.4e-14 * P * P * F * F * TH**3.55
+    FDEPEN = 0.5 + 0.5 / (1.0 + (F / 450.0) ** 2.0)
+    ALPHA = 9.95e-14 * FDEPEN * P * P * F * F * TH**3.22
 
     return ALPHA
 
 
-@numba.jit(cache=True, nopython=True)
-# https://github.com/numba/numba/issues/2518
-def TB_CALC_PL_IM10(T, tau, mu_s, freq):
+def abliq(LWC, F, T):
+    """COMPUTES POWER ABSORPTION COEFFICIENT IN NEPERS/KM
+    BY SUSPENDED CLOUD LIQUID WATER DROPLETS."""
+
+    ABLIQ = np.zeros(len(F), np.float32)
+    if T >= 233.0:
+        Tc = T - con.T0
+        theta = 300.0 / T
+        z = 0.0 + F * 1j
+
+        kappa = (
+            -43.7527 * theta**0.05
+            + 299.504 * theta**1.47
+            - 399.364 * theta**2.11
+            + 221.327 * theta**2.31
+        )
+
+        delta = 80.69715 * np.exp(-Tc / 226.45)
+        sd = 1164.023 * np.exp(-651.4728 / (Tc + 133.07))
+        kappa = kappa - delta * z / (sd + z)
+
+        delta = 4.008724 * np.exp(-Tc / 103.05)
+        hdelta = delta / 2.0
+        f1 = (
+            10.46012
+            + 0.1454962 * Tc
+            + 6.3267156e-02 * Tc**2
+            + 9.3786645e-04 * Tc**3
+        )
+        z1 = (-0.75 + 1 * 1j) * f1
+        z2 = -4500.0 + 2000.0 * 1j
+        cnorm = np.log10(z2 / z1)
+        chip = hdelta * np.log10((z - z2) / (z - z1)) / cnorm
+        chij = hdelta * np.log10((z - np.conj(z2)) / (z - np.conj(z1))) / np.conj(cnorm)
+        dchi = chip + chij - delta
+        kappa = kappa + dchi
+
+        RE = (kappa - 1.0) / (kappa + 2.0)
+        ABLIQ = -0.06286 * np.imag(RE) * F * LWC * 1000.0 * 1e-3 / con.c
+
+    return ABLIQ
+
+
+def rewat_ellison(T, F, LWC):
+    """Return liquid water absoption coefficient according to ELLISON 2006.
+
+    REFERENCES
+    BOOK ARTICLE FROM WILLIAM ELLISON IN MAETZLER 2006 (p.431-455):
+    THERMAL MICROWAVE RADIATION:
+    APPLICATIONS FOR REMOTE SENSING IET ELECTROMAGNETIC WAVES SERIES 52
+    ISBN: 978-086341-573-9"""
+    # *** Convert Salinity from parts per thousand to SI
+    salinity = 0.0
+    Temp = T - con.T0
+
+    # --------------------------------------------------------------------------
+    # COEFFS AND CALCULATION OF eps(FREQ, Temp, SAL) according to (5.21, p.445)
+    # --------------------------------------------------------------------------
+
+    # *** Coefficients a_i (Table 5.5 or p. 454):
+    a_1 = 0.46606917e-2
+    a_2 = -0.26087876e-4
+    a_3 = -0.63926782e-5
+    a_4 = 0.63000075e1
+    a_5 = 0.26242021e-2
+    a_6 = -0.42984155e-2
+    a_7 = 0.34414691e-4
+    a_8 = 0.17667420e-3
+    a_9 = -0.20491560e-6
+    a_10 = 0.58366888e3
+    a_11 = 0.12634992e3
+    a_12 = 0.69227972e-4
+    a_13 = 0.38957681e-6
+    a_14 = 0.30742330e3
+    a_15 = 0.12634992e3
+    a_16 = 0.37245044e1
+    a_17 = 0.92609781e-2
+    a_18 = -0.26093754e-1
+
+    # *** Calculate parameter functions (5.24)-(5.28), p.447
+    EPS_S = 87.85306 * np.exp(
+        -0.00456992 * Temp
+        - a_1 * salinity
+        - a_2 * salinity**2.0
+        - a_3 * salinity * Temp
+    )
+    EPS_1 = a_4 * np.exp(-a_5 * Temp - a_6 * salinity - a_7 * salinity * Temp)
+    tau_1 = (a_8 + a_9 * salinity) * np.exp(a_10 / (Temp + a_11)) * 1e-9
+    tau_2 = (a_12 + a_13 * salinity) * np.exp(a_14 / (Temp + a_15)) * 1e-9
+    EPS_INF = a_16 + a_17 * Temp + a_18 * salinity
+
+    # *** Finally apply the interpolation formula (5.21)
+    first_term = (EPS_S - EPS_1) / (1.0 + (-2.0 * np.pi * F * tau_1) * 1j)
+    second_term = (EPS_1 - EPS_INF) / (1.0 + (-2.0 * np.pi * F * tau_2) * 1j)
+    third_term = EPS_INF
+
+    # third_term = EPS_INF
+    EPS = first_term + second_term + third_term
+
+    # *** compute absorption coefficients
+    RE = (EPS - 1) / (EPS + 2)
+    MASS_ABSCOF = 6.0 * np.pi * np.imag(RE) * F * 1e-3 / con.c
+    ALIQ = MASS_ABSCOF * LWC * 1000.0
+
+    return ALIQ
+
+
+def TB_CALC(T, tau, mu_s, freq):
     """
     calculate brightness temperatures without scattering
     according to Simmer (94) pp. 87 - 91 (alpha = 1, no scattering)
     Planck/thermodynamic conform (28.05.03) # UL
     """
-    h = 6.6262e-34  # Planck constant
-    kB = 1.3806e-23  # Boltzmann constant
-    c_li = 2.997925 * 1e8  # spped of light
-
     kmax = len(T)
     n_f = len(freq)
 
     mu = np.zeros(n_f) + mu_s
     freq_si = freq * 1e9
-    lamda_si = c_li / freq_si
+    lamda_si = con.c / freq_si
 
     IN = np.zeros(n_f, dtype=np.float64) + 2.73
     IN = (
-        (2.0 * h * freq_si / (lamda_si**2.0))
+        (2.0 * con.h * freq_si / (lamda_si**2.0))
         * 1.0
-        / (np.exp(h * freq_si / (kB * IN)) - 1.0)
+        / (np.exp(con.h * freq_si / (con.kB * IN)) - 1.0)
     )
 
     tau_top = np.zeros(n_f, dtype=np.float64)
@@ -735,22 +549,22 @@ def TB_CALC_PL_IM10(T, tau, mu_s, freq):
             B = delta_tau - mu + mu * np.exp(-1 * delta_tau / mu)
 
             T_pl2 = (
-                (2.0 * h * freq_si / (lamda_si**2.0))
+                (2.0 * con.h * freq_si / (lamda_si**2.0))
                 * 1.0
-                / (np.exp(h * freq_si / (kB * T[kmax - 2 - i])) - 1)
+                / (np.exp(con.h * freq_si / (con.kB * T[kmax - 2 - i])) - 1)
             )
             T_pl1 = (
-                (2.0 * h * freq_si / (lamda_si**2.0))
+                (2.0 * con.h * freq_si / (lamda_si**2.0))
                 * 1.0
-                / (np.exp(h * freq_si / (kB * T[kmax - 1 - i])) - 1)
+                / (np.exp(con.h * freq_si / (con.kB * T[kmax - 1 - i])) - 1)
             )
             diff = (T_pl2 - T_pl1) / delta_tau
             IN = IN * np.exp(-1 * delta_tau / mu) + T_pl1 * A + diff * B
 
     TB = (
-        (h * freq_si / kB)
+        (con.h * freq_si / con.kB)
         * 1.0
-        / np.log((2 * h * freq_si / (IN * lamda_si**2.0)) + 1.0)
+        / np.log((2 * con.h * freq_si / (IN * lamda_si**2.0)) + 1.0)
     )
 
     return TB
