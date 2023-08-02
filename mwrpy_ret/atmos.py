@@ -12,7 +12,7 @@ def spec_heat(T: np.ndarray) -> np.ndarray:
 
 
 def abs_hum(T: np.ndarray, rh: np.ndarray) -> np.ndarray:
-    "Absolute humidity (kg/m^3)"
+    """Absolute humidity (kg/m^3)"""
     es = calc_saturation_vapor_pressure(T)
     return (rh * es) / (con.RW * T)
 
@@ -111,7 +111,7 @@ def rh2a(rh, T):
     return a
 
 
-def moist_rho_rh(p, T, rh, *qm):
+def moist_rho_rh(p, T, rh):
     """
     Input:
     p is in Pa
@@ -132,10 +132,10 @@ def moist_rho_rh(p, T, rh, *qm):
 
     q = rh2q(rh, T, p)
 
-    return moist_rho_q(p, T, q, *qm)
+    return moist_rho_q(p, T, q)
 
 
-def moist_rho_q(p, T, q, *qm):
+def moist_rho_q(p, T, q):
     """
     Input p is in Pa
     T is in K
@@ -151,15 +151,7 @@ def moist_rho_q(p, T, q, *qm):
     moist_rho_q(p,T,q,q_ice,q_snow,q_rain,q_cloud,q_graupel,q_hail)
     """
 
-    # if len(qm) > 0:
-    #     # get rid of masked data!
-    #     qm = np.ma.array(qm).filled(0)
-    #     qm[qm < 0] = 0
-    #     qm = np.sum(qm, axis=0)
-    # else:
-    #     qm = 0
-
-    return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q - qm))
+    return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
 
 
 def rh_to_iwv(relhum_lev, temp_lev, press_lev, hgt_lev):
@@ -188,7 +180,7 @@ def rh_to_iwv(relhum_lev, temp_lev, press_lev, hgt_lev):
     return np.nansum(ql * rho_moist * dz)
 
 
-def detect_liq_cloud(z, t, rh):
+def detect_liq_cloud(z, t, rh, p_rs):
     # ***********
     # INPUT
     # z: height grid
@@ -203,7 +195,11 @@ def detect_liq_cloud(z, t, rh):
     # z_cloud: array of cloudy height levels
     # ***********
 
-    rh_thres = 0.95  # 1
+    alpha = 0.59
+    beta = 1.37
+    sigma = p_rs / p_rs[0]
+    rh_thres = 1.0 - alpha * sigma * (1.0 - sigma) * (1.0 + beta * (sigma - 0.5))
+    # rh_thres = 0.95  # 1
     t_thres = 253.15  # K
     n = len(z)
     # ***determine cloud boundaries
@@ -211,7 +207,7 @@ def detect_liq_cloud(z, t, rh):
 
     cloud_bound_ind = np.zeros(n, dtype=int)
     for i in np.arange(0, (n - 1)):
-        if ((rh[i + 1] + rh[i]) / 2.0 > rh_thres) and (
+        if ((rh[i + 1] + rh[i]) / 2.0 > rh_thres[i]) and (
             (t[i + 1] + t[i]) / 2.0 > t_thres
         ):
             cloud_bound_ind[i] = np.bitwise_or(1, cloud_bound_ind[i])

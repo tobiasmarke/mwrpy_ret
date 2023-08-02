@@ -1,10 +1,9 @@
-import json
 import os
-import warnings
 
 import numpy as np
 
 import mwrpy_ret.constants as con
+from mwrpy_ret.utils import dcerror, loadCoeffsJSON
 
 
 def STP_IM10(
@@ -47,57 +46,6 @@ def STP_IM10(
     )
 
 
-def loadCoeffsJSON(path) -> dict:
-    """Load coefficients required for O2 absorption."""
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf8") as f:
-            try:
-                var_all = dict(**json.load(f))
-                for key in var_all.keys():
-                    var_all[key] = np.asarray(var_all[key])
-            except json.decoder.JSONDecodeError:
-                print(path)
-                raise
-    return dict(**var_all)
-
-
-def dcerror(x, y):
-    """SIXTH-ORDER APPROX TO THE COMPLEX ERROR FUNCTION OF z=X+iY."""
-    a = [
-        122.607931777104326,
-        214.382388694706425,
-        181.928533092181549,
-        93.155580458138441,
-        30.180142196210589,
-        5.912626209773153,
-        0.564189583562615,
-    ]
-    b = [
-        122.607931773875350,
-        352.730625110963558,
-        457.334478783897737,
-        348.703917719495792,
-        170.354001821091472,
-        53.992906912940207,
-        10.479857114260399,
-    ]
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        ZH = np.abs(y) - x * 1j
-        ASUM = (
-            ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
-        ) * ZH + a[0]
-        BSUM = (
-            (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH
-            + b[1]
-        ) * ZH + b[0]
-        w = ASUM / BSUM
-        w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
-        DCERROR = w
-        DCERROR[y < 0] = w2[y < 0]
-        return DCERROR
-
-
 def TAU_CALC(
     z,  # height [m]
     T,  # Temp. [K]
@@ -126,14 +74,13 @@ def TAU_CALC(
     tau_o2 = np.zeros((kmax - 1, n_f))
 
     for ii in range(kmax - 1):
-        # alles SI!!
         deltaz = z[kmax - 1 - ii] - z[kmax - 1 - ii - 1]
         T_mean = (T[kmax - 1 - ii] + T[kmax - 1 - ii - 1]) / 2.0
         deltap = p[kmax - 1 - ii] - p[kmax - 1 - ii - 1]
 
-        if deltap >= 0:
+        if deltap >= 0.0:
             p[kmax - 1 - ii] = p[kmax - 1 - ii] - 0.1
-            if deltap >= 1:
+            if deltap > 1.0:
                 print(
                     "Warning: p profile adjusted by %f5.2 to assure monotonic"
                     "decrease!",
@@ -146,24 +93,22 @@ def TAU_CALC(
 
         # ****gas absorption
         # water vapor
-        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100, f)
+        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100.0, f)
         AWV = AWV / 1000.0
 
         # oxygen
         AO2 = ABO2_R22(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f)
         AO2 = AO2 / 1000.0
 
-        # nitrogen (Rosenkranz O2)
-        AN2 = ABN2_R22(T_mean, p_mean / 100, f)
+        # nitrogen
+        AN2 = ABN2_R22(T_mean, p_mean / 100.0, f)
         AN2 = AN2 / 1000.0
 
-        ALIQ = rewat_ellison(T_mean, f, LWC[kmax - 2 - ii])
-        # ALIQ = abliq(LWC[kmax - 1 - ii], f, T_mean)
-        # if W_mean > 0:
-        #     import pdb
-        #     pdb.set_trace()
+        # liquid water
+        ABLIQ = ABLIQ_R22(LWC[kmax - 2 - ii], f, T_mean)
+        ABLIQ = ABLIQ / 1000.0
 
-        absg = AWV + AO2 + AN2 + ALIQ
+        absg = AWV + AO2 + AN2 + ABLIQ
 
         abs_all[kmax - 2 - ii, :] = absg
         abs_wv[kmax - 2 - ii, :] = AWV
@@ -377,11 +322,11 @@ def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
 
         SUM = SUM + STR * (SF1 + SF2) * (FREQ / CF["F"][K]) ** 2
 
-    O2ABS = 1.6097e11 * SUM * PRESDA * TH**3
-    O2ABS[O2ABS < 0] = 0
-    O2ABS = O2ABS * 1.004  # increase absorption to match Koshelev2017
+    ALPHA = 1.6097e11 * SUM * PRESDA * TH**3
+    ALPHA[ALPHA < 0] = 0
+    ALPHA = ALPHA * 1.004  # increase absorption to match Koshelev2017
 
-    return O2ABS
+    return ALPHA
 
 
 def ABN2_R22(T, P, F):
@@ -398,11 +343,11 @@ def ABN2_R22(T, P, F):
     return ALPHA
 
 
-def abliq(LWC, F, T):
+def ABLIQ_R22(LWC, F, T):
     """COMPUTES POWER ABSORPTION COEFFICIENT IN NEPERS/KM
     BY SUSPENDED CLOUD LIQUID WATER DROPLETS."""
 
-    ABLIQ = np.zeros(len(F), np.float32)
+    ALPHA = np.zeros(len(F), np.float32)
     if T >= 233.0:
         Tc = T - con.T0
         theta = 300.0 / T
@@ -436,80 +381,15 @@ def abliq(LWC, F, T):
         kappa = kappa + dchi
 
         RE = (kappa - 1.0) / (kappa + 2.0)
-        ABLIQ = -0.06286 * np.imag(RE) * F * LWC * 1000.0 * 1e-3 / con.c
+        ALPHA = -0.06286 * np.imag(RE) * F * LWC
 
-    return ABLIQ
-
-
-def rewat_ellison(T, F, LWC):
-    """Return liquid water absoption coefficient according to ELLISON 2006.
-
-    REFERENCES
-    BOOK ARTICLE FROM WILLIAM ELLISON IN MAETZLER 2006 (p.431-455):
-    THERMAL MICROWAVE RADIATION:
-    APPLICATIONS FOR REMOTE SENSING IET ELECTROMAGNETIC WAVES SERIES 52
-    ISBN: 978-086341-573-9"""
-    # *** Convert Salinity from parts per thousand to SI
-    salinity = 0.0
-    Temp = T - con.T0
-
-    # --------------------------------------------------------------------------
-    # COEFFS AND CALCULATION OF eps(FREQ, Temp, SAL) according to (5.21, p.445)
-    # --------------------------------------------------------------------------
-
-    # *** Coefficients a_i (Table 5.5 or p. 454):
-    a_1 = 0.46606917e-2
-    a_2 = -0.26087876e-4
-    a_3 = -0.63926782e-5
-    a_4 = 0.63000075e1
-    a_5 = 0.26242021e-2
-    a_6 = -0.42984155e-2
-    a_7 = 0.34414691e-4
-    a_8 = 0.17667420e-3
-    a_9 = -0.20491560e-6
-    a_10 = 0.58366888e3
-    a_11 = 0.12634992e3
-    a_12 = 0.69227972e-4
-    a_13 = 0.38957681e-6
-    a_14 = 0.30742330e3
-    a_15 = 0.12634992e3
-    a_16 = 0.37245044e1
-    a_17 = 0.92609781e-2
-    a_18 = -0.26093754e-1
-
-    # *** Calculate parameter functions (5.24)-(5.28), p.447
-    EPS_S = 87.85306 * np.exp(
-        -0.00456992 * Temp
-        - a_1 * salinity
-        - a_2 * salinity**2.0
-        - a_3 * salinity * Temp
-    )
-    EPS_1 = a_4 * np.exp(-a_5 * Temp - a_6 * salinity - a_7 * salinity * Temp)
-    tau_1 = (a_8 + a_9 * salinity) * np.exp(a_10 / (Temp + a_11)) * 1e-9
-    tau_2 = (a_12 + a_13 * salinity) * np.exp(a_14 / (Temp + a_15)) * 1e-9
-    EPS_INF = a_16 + a_17 * Temp + a_18 * salinity
-
-    # *** Finally apply the interpolation formula (5.21)
-    first_term = (EPS_S - EPS_1) / (1.0 + (-2.0 * np.pi * F * tau_1) * 1j)
-    second_term = (EPS_1 - EPS_INF) / (1.0 + (-2.0 * np.pi * F * tau_2) * 1j)
-    third_term = EPS_INF
-
-    # third_term = EPS_INF
-    EPS = first_term + second_term + third_term
-
-    # *** compute absorption coefficients
-    RE = (EPS - 1) / (EPS + 2)
-    MASS_ABSCOF = 6.0 * np.pi * np.imag(RE) * F * 1e-3 / con.c
-    ALIQ = MASS_ABSCOF * LWC * 1000.0
-
-    return ALIQ
+    return ALPHA
 
 
 def TB_CALC(T, tau, mu_s, freq):
     """
     calculate brightness temperatures without scattering
     according to Simmer (94) pp. 87 - 91 (alpha = 1, no scattering)
-    Planck/thermodynamic conform (28.05.03) # UL
     """
     kmax = len(T)
     n_f = len(freq)
