@@ -1,0 +1,13 @@
+# Site config file
+
+params:
+  altitude: 104.
+  longitude: 14.118
+  latitude: 52.208
+
+  # path to input data and path for processed files
+  data_rs: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
+  data_out: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
+
+global_specs:
+  title: Retrieval input data for Lindenberg, Germany

@@ -16,7 +16,7 @@ LATENT_HEAT = 2.26e6
 RS = 287.058
 
 # Specific gas constant for water vapor (J/kg K)
-RW = 462.0
+RW = 461.5
 
 # Vapor pressure e0 (Pa) at T0 (K)
 e0 = 611.0

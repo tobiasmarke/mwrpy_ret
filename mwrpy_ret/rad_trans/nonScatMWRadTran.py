@@ -15,9 +15,7 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
-    # re-calculate opt. depth for every angle =0: no! (=1: yes is default),
-    # tau_calc=True,
-    # can save some time when calc. Jacobians
+    tau: np.ndarray | None = None,
 ):
     """
     non-scattering microwave radiative transfer using Rosenkranz 1998 gas
@@ -34,15 +32,14 @@ def STP_IM10(
     mu = np.cos(theta) + 0.025 * np.exp(-11.0 * np.cos(theta))
 
     # ****radiative transfer
-    tau, tau_wv, tau_o2 = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
+    if tau is None:
+        tau = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
 
     TB = TB_CALC(T_final, tau, mu, f)
 
     return (
         TB,  # [K] brightness temperature array of f grid
         tau,  # total optical depth
-        tau_wv,  # WV optical depth
-        tau_o2,
     )
 
 
@@ -64,14 +61,8 @@ def TAU_CALC(
 
     kmax = len(z)
     n_f = len(f)
-
     abs_all = np.zeros((kmax - 1, n_f))
-    abs_wv = np.zeros((kmax - 1, n_f))
-    abs_o2 = np.zeros((kmax - 1, n_f))
-
     tau = np.zeros((kmax - 1, n_f))
-    tau_wv = np.zeros((kmax - 1, n_f))
-    tau_o2 = np.zeros((kmax - 1, n_f))
 
     for ii in range(kmax - 1):
         deltaz = z[kmax - 1 - ii] - z[kmax - 1 - ii - 1]
@@ -109,26 +100,16 @@ def TAU_CALC(
         ABLIQ = ABLIQ / 1000.0
 
         absg = AWV + AO2 + AN2 + ABLIQ
-
         abs_all[kmax - 2 - ii, :] = absg
-        abs_wv[kmax - 2 - ii, :] = AWV
-        abs_o2[kmax - 2 - ii, :] = AO2
-
         tau_x = np.zeros(n_f)
-        tau_x1 = np.zeros(n_f)
-        tau_x2 = np.zeros(n_f)
 
         for jj in range(ii + 1):
             deltaz = z[kmax - 1 - jj] - z[kmax - 2 - jj]
             tau_x = (abs_all[kmax - 2 - jj, :]) * deltaz + tau_x
-            tau_x1 = (abs_wv[kmax - 2 - jj, :]) * deltaz + tau_x1
-            tau_x2 = (abs_o2[kmax - 2 - jj, :]) * deltaz + tau_x2
 
         tau[kmax - 2 - ii, :] = tau_x
-        tau_wv[kmax - 2 - ii, :] = tau_x1
-        tau_o2[kmax - 2 - ii, :] = tau_x2
 
-    return tau, tau_wv, tau_o2  # total opt. depth  # WV opt. depth  # O2 opt. depth
+    return tau
 
 
 def ABWV_R22(

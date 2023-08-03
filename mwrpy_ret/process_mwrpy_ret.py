@@ -1,81 +1,52 @@
+import datetime
+import logging
+import os
+
 import numpy as np
 
 from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_rs
-from mwrpy_ret.utils import get_file_list
-
-file_list = get_file_list("/home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data")
-freq = np.array(
-    [
-        22.240,
-        23.040,
-        23.840,
-        25.440,
-        26.240,
-        27.840,
-        31.400,
-        51.260,
-        52.280,
-        53.860,
-        54.940,
-        56.660,
-        57.300,
-        58.00,
-    ]
-)
-height_int = np.array(
-    [
-        0.0000000,
-        50.000000,
-        100.00000,
-        150.00000,
-        200.00000,
-        250.00000,
-        325.00000,
-        400.00000,
-        475.00000,
-        550.00000,
-        625.00000,
-        700.00000,
-        800.00000,
-        900.00000,
-        1000.0000,
-        1150.0000,
-        1300.0000,
-        1450.0000,
-        1600.0000,
-        1800.0000,
-        2000.0000,
-        2250.0000,
-        2500.0000,
-        2750.0000,
-        3000.0000,
-        3250.0000,
-        3500.0000,
-        3750.0000,
-        4000.0000,
-        4250.0000,
-        4500.0000,
-        4750.0000,
-        5000.0000,
-        5500.0000,
-        6000.0000,
-        6500.0000,
-        7000.0000,
-        7500.0000,
-        8000.0000,
-        8500.0000,
-        9000.0000,
-        9500.0000,
-        10000.000,
-        15000.000,
-        20000.000,
-        25000.000,
-        30000.000,
-    ]
+from mwrpy_ret.utils import (
+    _get_filename,
+    append_data,
+    date_range,
+    get_file_list,
+    get_processing_dates,
+    isodate2date,
+    read_yaml_config,
 )
 
-for file in file_list:
-    tb, T, p, q, lwp, iwv, z = rad_trans_rs(file, height_int, freq)
-    print(iwv)
-    print(lwp * 1000.0)
-    print(tb)
+
+def main(args):
+    logging.basicConfig(level="INFO")
+    _start_date, _stop_date = get_processing_dates(args)
+    start_date = isodate2date(_start_date)
+    stop_date = isodate2date(_stop_date)
+    output_all: dict = {}
+    for date in date_range(start_date, stop_date):
+        output_day = process_input(args.command, date, args.site)
+        logging.info(f"Radiative transfer using {args.command} for {args.site}, {date}")
+        for key, array in output_day.items():
+            output_all = append_data(output_all, key, array)
+
+    output_file = _get_filename(args.command, start_date, stop_date, args.site)
+    output_dir = os.path.dirname(output_file)
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+
+def process_input(source: str, date: datetime.date, site: str) -> dict:
+    _, params = read_yaml_config(site)
+    output_day: dict = {}
+    if source == "radiosonde":
+        data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
+        file_names = get_file_list(data_in)
+        for file in file_names:
+            output_hour = rad_trans_rs(
+                file,
+                np.array(params["height"]),
+                np.array(params["frequency"]),
+                np.array(params["elevation"]) - 90.0,
+            )
+            for key, array in output_hour.items():
+                output_day = append_data(output_day, key, array)
+    return output_day

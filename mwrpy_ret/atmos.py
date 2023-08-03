@@ -38,57 +38,6 @@ def calc_saturation_vapor_pressure(temperature: np.ndarray) -> np.ndarray:
     ) * HPA_TO_P
 
 
-def e2q(e, p):
-    """
-    Calculate the specific humidity from water vapour pressure and air pressure.
-
-    Input:
-    e is in Pa
-    p is in Pa
-
-    Output
-    q in kg/kg
-    """
-    q = con.MW_RATIO * e / (p - (1 - con.MW_RATIO) * e)
-    return q
-
-
-def q2e(q, p):
-    """
-    Calculate water vapour pressure from the specific humidity and air pressure.
-
-    Input:
-    q in kg/kg
-    p is in Pa
-
-    Output
-    e is in Pa
-    """
-    e = p / ((con.MW_RATIO / q) + 1 - con.MW_RATIO)
-    return e
-
-
-def rh2q(rh, T, p):
-    """
-    Calculate the specific humidity from relative humidity, air temperature,
-    and pressure.
-
-    Input:
-    T is in K
-    rh is in Pa/Pa
-    p is in Pa
-
-    Output
-    q in kg/kg
-    """
-
-    eStar = calc_saturation_vapor_pressure(T)
-    e = rh * eStar
-    q = e2q(e, p)
-    del e, eStar
-    return q
-
-
 def rh2a(rh, T):
     """
     Calculate the absolute humidity from relative humidity, air temperature,
@@ -103,9 +52,6 @@ def rh2a(rh, T):
     Source: Kraus: Chapter 8.1.2
     """
 
-    if np.any(rh > 5):
-        raise TypeError("rh must not be in %")
-
     e = rh * calc_saturation_vapor_pressure(T)
     a = e / (con.RW * T)
     return a
@@ -117,9 +63,6 @@ def moist_rho_rh(p, T, rh):
     p is in Pa
     T is in K
     rh is in Pa/Pa
-    Optional, several possible:
-    qm is in kg/kg other species which contribute to the air mass!
-    (ice, snow, cloud etc.)
 
     Output:
     density of moist air [kg/m^3]
@@ -130,31 +73,14 @@ def moist_rho_rh(p, T, rh):
 
     """
 
-    q = rh2q(rh, T, p)
-
-    return moist_rho_q(p, T, q)
-
-
-def moist_rho_q(p, T, q):
-    """
-    Input p is in Pa
-    T is in K
-    q is in kg/kg
-    Optional, several possible:
-    qm is in kg/kg other species which contribute to the air mass!
-    (ice, snow, cloud etc.)
-
-    Output:
-    density of moist air [kg/m^3]
-
-    Example:
-    moist_rho_q(p,T,q,q_ice,q_snow,q_rain,q_cloud,q_graupel,q_hail)
-    """
+    eStar = calc_saturation_vapor_pressure(T)
+    e = rh * eStar
+    q = con.MW_RATIO * e / (p - (1 - con.MW_RATIO) * e)
 
     return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
 
 
-def rh_to_iwv(relhum_lev, temp_lev, press_lev, hgt_lev):
+def rh_to_iwv(T, rh, height):
     """
     Calculate the integrated water vapour
 
@@ -167,17 +93,12 @@ def rh_to_iwv(relhum_lev, temp_lev, press_lev, hgt_lev):
     Output
     iwv in kg/m^2
     """
-    dz = np.diff(hgt_lev, axis=-1)
-    relhum = (relhum_lev[..., 0:-1] + relhum_lev[..., 1:]) / 2.0
-    temp = (temp_lev[..., 0:-1] + temp_lev[..., 1:]) / 2.0
+    iwv = 0.0
+    absh = abs_hum(T, rh)
+    for ix in range(len(absh) - 1):
+        iwv = iwv + ((absh[ix] + absh[ix + 1]) / 2.0) * (height[ix + 1] - height[ix])
 
-    xp = -1.0 * np.log(press_lev[..., 1:] / press_lev[..., 0:-1]) / dz
-    press = -1.0 * press_lev[..., 0:-1] / xp * (np.exp(-xp * dz) - 1.0) / dz
-
-    ql = rh2q(relhum, temp, press)
-    rho_moist = moist_rho_q(press, temp, ql)
-
-    return np.nansum(ql * rho_moist * dz)
+    return iwv
 
 
 def detect_liq_cloud(z, t, rh, p_rs):
@@ -266,7 +187,7 @@ def adiab(i, T, P, z):
         RWV = rh2a(1.0, T[j])
         WS = RWV / (R - RWV)
         DTPS = pseudoAdiabLapseRate(T[j], WS)
-        TCL = TCL + DTPS * (deltaz)
+        TCL = TCL - DTPS * (deltaz)
 
         #   Compute adiabatic LWC
 
@@ -297,7 +218,6 @@ def mod_ad(T_cloud, p_cloud, z_cloud):
     lwc = np.zeros(n_level - 1)
 
     thick = 0.0
-
     for jj in range(n_level - 1):
         deltaz = z_cloud[jj + 1] - z_cloud[jj]
         thick = deltaz + thick
