@@ -4,12 +4,20 @@ import json
 import logging
 import os
 import warnings
-from typing import Iterator
+from typing import Any, Iterator, NamedTuple
 
 import numpy as np
 import yaml
 from numpy import ma
 from yaml.loader import SafeLoader
+
+
+class MetaData(NamedTuple):
+    long_name: str
+    units: str
+    standard_name: str | None = None
+    definition: str | None = None
+    comment: str | None = None
 
 
 def append_data(data_in: dict, key: str, array: np.ndarray) -> dict:
@@ -71,6 +79,34 @@ def date_range(
     """Returns range between two dates (datetimes)."""
     for n in range(int((end_date - start_date).days)):
         yield start_date + datetime.timedelta(n)
+
+
+def str_to_numeric(value: str) -> int | float:
+    """Converts string to number (int or float)."""
+    try:
+        return int(value)
+    except ValueError:
+        return float(value)
+
+
+def isscalar(array: Any) -> bool:
+    """Tests if input is scalar.
+    By "scalar" we mean that array has a single value.
+    Examples:
+        >>> isscalar(1)
+            True
+        >>> isscalar([1])
+            True
+        >>> isscalar(np.array(1))
+            True
+        >>> isscalar(np.array([1]))
+            True
+    """
+
+    arr = ma.array(array)
+    if not hasattr(arr, "__len__") or arr.shape == () or len(arr) == 1:
+        return True
+    return False
 
 
 def read_yaml_config(site: str) -> tuple[dict, dict]:

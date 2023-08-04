@@ -93,10 +93,9 @@ def rh_to_iwv(T, rh, height):
     Output
     iwv in kg/m^2
     """
-    iwv = 0.0
+
     absh = abs_hum(T, rh)
-    for ix in range(len(absh) - 1):
-        iwv = iwv + ((absh[ix] + absh[ix + 1]) / 2.0) * (height[ix + 1] - height[ix])
+    iwv = np.sum((absh[:-1] + absh[1:]) / 2.0 * np.diff(height))
 
     return iwv
 
@@ -122,29 +121,23 @@ def detect_liq_cloud(z, t, rh, p_rs):
     rh_thres = 1.0 - alpha * sigma * (1.0 - sigma) * (1.0 + beta * (sigma - 0.5))
     # rh_thres = 0.95  # 1
     t_thres = 253.15  # K
-    n = len(z)
     # ***determine cloud boundaries
     # --> layers where mean rh GT rh_thres
 
-    cloud_bound_ind = np.zeros(n, dtype=int)
-    for i in np.arange(0, (n - 1)):
-        if ((rh[i + 1] + rh[i]) / 2.0 > rh_thres[i]) and (
-            (t[i + 1] + t[i]) / 2.0 > t_thres
-        ):
-            cloud_bound_ind[i] = np.bitwise_or(1, cloud_bound_ind[i])
-            cloud_bound_ind[i + 1] = np.bitwise_or(2, cloud_bound_ind[i + 1])
-    i_cloud = np.where(cloud_bound_ind != 0)[0]
+    i_cloud, i_top, i_base = (
+        np.where((rh > rh_thres) & (t > t_thres))[0],
+        np.empty(0),
+        np.empty(0),
+    )
+    if len(i_cloud) > 0:
+        i_base = np.unique(
+            np.hstack((i_cloud[0], i_cloud[np.diff(np.hstack((0, i_cloud))) > 1]))
+        )
+        i_top = np.hstack(
+            (i_cloud[np.diff(np.hstack((i_cloud, 0))) > 1] - 1, i_cloud[-1])
+        )
 
-    # ***determine z_base & z_top arrays
-    i_top = []
-    i_base = []
-
-    if len(i_cloud) != 0:
-        i_base = np.where(cloud_bound_ind == 1)[0]
-        i_top = np.where(cloud_bound_ind == 2)[0]
-        n_base = len(i_base)
-        n_top = len(i_top)
-        if n_top != n_base:
+        if len(i_top) != len(i_base):
             print("something wrong, number of bases NE number of cloud tops!")
             return [], [], []
 
@@ -223,15 +216,8 @@ def mod_ad(T_cloud, p_cloud, z_cloud):
         thick = deltaz + thick
         lwc[jj] = adiab(jj + 1, T_cloud, p_cloud, z_cloud)
         lwc[jj] = lwc[jj] * (-0.144779 * np.log(thick) + 1.239387)
-    return lwc
-
-
-def lwp_from_lwc(lwc, z):
-    lwp = 0.0
-    for i_z in range(len(lwc) - 1):
-        lwp = lwp + lwc[i_z] * (z[i_z + 1] - z[i_z])
-
-    return lwp
+    cloud_new = z_cloud[:-1]
+    return lwc, cloud_new
 
 
 def pseudoAdiabLapseRate(T, Ws):
@@ -263,14 +249,8 @@ def pseudoAdiabLapseRate(T, Ws):
 
 
 def interp_log_p(p, z, z_int):
-    p_interp = np.ones(len(z_int), np.float32) * -999.0
-    for i_i, i_v in enumerate(z_int):
-        for jjj in range(len(z) - 1):
-            if (z[jjj] <= i_v) & (z[jjj + 1] >= i_v):
-                if p[jjj + 1] < p[jjj]:
-                    dz = z[jjj + 1] - z[jjj]
-                    dz_new = i_v - z[jjj]
-                    xp = -np.log(p[jjj + 1] / p[jjj]) / dz
-                    p_interp[i_i] = p[jjj] * np.exp(-xp * dz_new)
+    p_interp = np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
+    _, xx, yy = np.intersect1d(z_int, z, return_indices=True)
+    p_interp[xx] = p[yy]
 
     return p_interp * HPA_TO_P

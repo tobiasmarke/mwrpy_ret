@@ -4,14 +4,7 @@ import numpy as np
 from metpy.units import units
 
 import mwrpy_ret.constants as con
-from mwrpy_ret.atmos import (
-    abs_hum,
-    detect_liq_cloud,
-    interp_log_p,
-    lwp_from_lwc,
-    mod_ad,
-    rh_to_iwv,
-)
+from mwrpy_ret.atmos import abs_hum, detect_liq_cloud, interp_log_p, mod_ad, rh_to_iwv
 from mwrpy_ret.rad_trans import STP_IM10
 
 
@@ -21,6 +14,7 @@ def rad_trans_rs(
     freq: np.ndarray,
     theta: np.ndarray,
 ) -> dict:
+    output: dict = {}
     with nc.Dataset(file_name) as rs_data:
         # GPM to m
         geopot = units.Quantity(
@@ -44,38 +38,34 @@ def rad_trans_rs(
             rs_data.variables["air_pressure"][:] * 100.0,
         )
 
-        lwc, lwp = np.empty(0), 0.0
+        lwc, lwp, height_new, cloud_new = np.empty(0), 0.0, np.empty(0), np.empty(0)
         if len(top) > 0:
             for icl, _ in enumerate(top):
                 xcl = np.where((height >= base[icl]) & (height <= top[icl]))[0]
-                lwcx = mod_ad(
-                    rs_data.variables["air_temperature"][xcl] + con.T0,
-                    rs_data.variables["air_pressure"][xcl] * 100.0,
-                    height[xcl],
-                )
-                lwc = np.hstack((lwc, lwcx))
-                lwp = lwp + lwp_from_lwc(lwcx, height[xcl])
+                if len(xcl) > 0:
+                    lwcx, cloudx = mod_ad(
+                        rs_data.variables["air_temperature"][xcl] + con.T0,
+                        rs_data.variables["air_pressure"][xcl] * 100.0,
+                        height[xcl],
+                    )
+                    cloud_new = np.hstack((cloud_new, cloudx))
+                    lwc = np.hstack((lwc, lwcx))
+                    lwp = lwp + np.sum(lwcx * np.diff(height[xcl]))
 
-            _, xx, _ = np.intersect1d(height, cloud, return_indices=True)
-            lwc = mod_ad(
-                rs_data.variables["air_temperature"][xx] + con.T0,
-                rs_data.variables["air_pressure"][xx] * 100.0,
-                height[xx],
-            )
+                    if len(height_new) == 0:
+                        height_new = height_int[height_int < base[0]]
+                    else:
+                        height_new = np.hstack(
+                            (
+                                height_new,
+                                height_int[
+                                    (height_int > top[icl - 1])
+                                    & (height_int < base[icl])
+                                ],
+                            )
+                        )
 
             # New vertical grid
-            for ic, _ in enumerate(base):
-                if ic == 0:
-                    height_new = height_int[height_int < base[0]]
-                else:
-                    height_new = np.hstack(
-                        (
-                            height_new,
-                            height_int[
-                                (height_int > top[ic - 1]) & (height_int < base[ic])
-                            ],
-                        )
-                    )
             height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
             height_new = np.sort(np.hstack((height_new, cloud)))
         else:
@@ -98,13 +88,13 @@ def rad_trans_rs(
 
             abshum_new = abs_hum(temperature_new, relhum_new)
 
-            _, xx, _ = np.intersect1d(height_new, cloud, return_indices=True)
+            _, xx, _ = np.intersect1d(height_new, cloud_new, return_indices=True)
             lwc_new = np.zeros(len(height_new) - 1, np.float32)
-            lwc_new[xx[0:-1]] = lwc
+            lwc_new[xx] = lwc
 
             # Radiative transport
-            tb = np.empty((len(freq), len(theta)), np.float32)
-            tb[:, 0], tau = STP_IM10(
+            tb = np.empty((1, len(freq), len(theta)), np.float32)
+            tb[0, :, 0], tau = STP_IM10(
                 height_new,
                 temperature_new,
                 pressure_new,
@@ -115,7 +105,7 @@ def rad_trans_rs(
             )
             if len(theta) > 1:
                 for i_ang in range(len(theta) - 1):
-                    tb[:, i_ang + 1], _ = STP_IM10(
+                    tb[0, :, i_ang + 1], _ = STP_IM10(
                         height_new,
                         temperature_new,
                         pressure_new,
@@ -141,12 +131,13 @@ def rad_trans_rs(
 
             abshum_int = abs_hum(temperature_int, relhum_int)
 
-        output = {
-            "tb": tb,
-            "T": np.asarray(temperature_int),
-            "p": np.asarray(pressure_int),
-            "q": abshum_int,
-            "lwp": np.float32(lwp),
-            "iwv": np.float32(iwv),
-        }
-        return output
+            output = {
+                "time": np.asarray([rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data]),
+                "tb": tb,
+                "temperature": np.expand_dims(temperature_int, 0),
+                "pressure": np.expand_dims(pressure_int, 0),
+                "absolute_humidity": np.expand_dims(abshum_int, 0),
+                "lwp": np.asarray([lwp]),
+                "iwv": np.asarray([iwv]),
+            }
+    return output
