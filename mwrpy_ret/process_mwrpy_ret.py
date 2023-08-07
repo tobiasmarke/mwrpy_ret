@@ -38,12 +38,13 @@ def main(args):
 
     output_file = _get_filename(args.command, start_date, stop_date, args.site)
     output_dir = os.path.dirname(output_file)
-    if (not os.path.isdir(output_dir)) & ("time" in data_nc):
+    if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
+    if ("time" in data_nc) & (output_file is not None):
         ret_in = ret_mwr.Ret(data_nc)
         ret_in.data = get_data_attributes(ret_in.data, args.command)
-        if output_file is not None:
-            ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
+        logging.info(f"Saving output file {output_file}")
+        ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
 
 
 def process_input(source: str, date: datetime.date, params: dict) -> dict:
