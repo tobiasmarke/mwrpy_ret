@@ -1,3 +1,12 @@
+## 0.2.0 – 2023-08-08
+
+- Fixed height & pressure
+- Save fix
+- Save output & refactor loops
+- Add cli
+- Update functions
+- Implementation of basic functions
+
 ## 0.1.3 – 2023-07-26
 
 - Publish project workflow
