@@ -21,7 +21,7 @@ def rad_trans_rs(
             rs_data.variables["geopotential_height"][:] * con.g0, "m^2/s^2"
         )
         height = metpy.calc.geopotential_to_height(geopot).magnitude
-        height = height - height[0]
+        height = height - height[0] + height_int[0]
 
         # Integrated water vapor
         iwv = rh_to_iwv(
@@ -31,18 +31,23 @@ def rad_trans_rs(
         )
 
         # Cloud model / water
-        top, base, cloud = detect_liq_cloud(
+        top, base = detect_liq_cloud(
             height,
             rs_data.variables["air_temperature"][:] + con.T0,
             rs_data.variables["relative_humidity"][:] / 100.0,
             rs_data.variables["air_pressure"][:] * 100.0,
         )
 
-        lwc, lwp, height_new, cloud_new = np.empty(0), 0.0, np.empty(0), np.empty(0)
+        lwc, lwp, height_new, cloud_new = (
+            np.empty(0, np.float64),
+            0.0,
+            np.empty(0, np.float64),
+            np.empty(0, np.float64),
+        )
         if len(top) > 0:
             for icl, _ in enumerate(top):
                 xcl = np.where((height >= base[icl]) & (height <= top[icl]))[0]
-                if len(xcl) > 0:
+                if len(xcl) > 1:
                     lwcx, cloudx = mod_ad(
                         rs_data.variables["air_temperature"][xcl] + con.T0,
                         rs_data.variables["air_pressure"][xcl] * 100.0,
@@ -67,7 +72,7 @@ def rad_trans_rs(
 
             # New vertical grid
             height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
-            height_new = np.sort(np.hstack((height_new, cloud)))
+            height_new = np.sort(np.hstack((height_new, cloud_new)))
         else:
             height_new = height_int
 
@@ -88,7 +93,9 @@ def rad_trans_rs(
 
             abshum_new = abs_hum(temperature_new, relhum_new)
 
-            _, xx, _ = np.intersect1d(height_new, cloud_new, return_indices=True)
+            _, xx, _ = np.intersect1d(
+                height_new, cloud_new, assume_unique=True, return_indices=True
+            )
             lwc_new = np.zeros(len(height_new) - 1, np.float32)
             lwc_new[xx] = lwc
 

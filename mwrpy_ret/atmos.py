@@ -126,10 +126,10 @@ def detect_liq_cloud(z, t, rh, p_rs):
 
     i_cloud, i_top, i_base = (
         np.where((rh > rh_thres) & (t > t_thres))[0],
-        np.empty(0),
-        np.empty(0),
+        np.empty(0, np.int32),
+        np.empty(0, np.int32),
     )
-    if len(i_cloud) > 0:
+    if len(i_cloud) > 1:
         i_base = np.unique(
             np.hstack((i_cloud[0], i_cloud[np.diff(np.hstack((0, i_cloud))) > 1]))
         )
@@ -139,9 +139,9 @@ def detect_liq_cloud(z, t, rh, p_rs):
 
         if len(i_top) != len(i_base):
             print("something wrong, number of bases NE number of cloud tops!")
-            return [], [], []
+            return [], []
 
-    return z[i_top], z[i_base], z[i_cloud]
+    return z[i_top], z[i_base]
 
 
 def adiab(i, T, P, z):
@@ -209,6 +209,7 @@ def adiab(i, T, P, z):
 def mod_ad(T_cloud, p_cloud, z_cloud):
     n_level = len(T_cloud)
     lwc = np.zeros(n_level - 1)
+    cloud_new = np.zeros(n_level - 1)
 
     thick = 0.0
     for jj in range(n_level - 1):
@@ -216,7 +217,7 @@ def mod_ad(T_cloud, p_cloud, z_cloud):
         thick = deltaz + thick
         lwc[jj] = adiab(jj + 1, T_cloud, p_cloud, z_cloud)
         lwc[jj] = lwc[jj] * (-0.144779 * np.log(thick) + 1.239387)
-    cloud_new = z_cloud[:-1]
+        cloud_new[jj] = z_cloud[jj] + deltaz / 2.0
     return lwc, cloud_new
 
 
@@ -250,7 +251,7 @@ def pseudoAdiabLapseRate(T, Ws):
 
 def interp_log_p(p, z, z_int):
     p_interp = np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
-    _, xx, yy = np.intersect1d(z_int, z, return_indices=True)
-    p_interp[xx] = p[yy]
+    # _, xx, yy = np.intersect1d(z_int, z, return_indices=True)
+    # p_interp[xx] = p[yy]
 
     return p_interp * HPA_TO_P

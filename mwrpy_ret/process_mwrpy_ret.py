@@ -55,7 +55,7 @@ def process_input(source: str, date: datetime.date, params: dict) -> dict:
         for file in file_names:
             output_hour = rad_trans_rs(
                 file,
-                np.array(params["height"]),
+                np.array(params["height"]) + params["altitude"],
                 np.array(params["frequency"]),
                 np.array(params["elevation_angle"]) - 90.0,
             )
