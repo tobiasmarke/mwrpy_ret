@@ -16,6 +16,8 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
+    f_all: np.ndarray,
+    ind1: np.ndarray,
     tau_k: np.ndarray | None = None,
     tau_v: np.ndarray | None = None,
 ):
@@ -50,72 +52,87 @@ def STP_IM10(
     )
     FRIN = loadCoeffsJSON(path)
     bdw_wgh = FRIN["FRIN"].T
-    f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
-    for ff in range(7):
-        ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
-        f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
-        ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
 
     # Calculate optical thickness
     if tau_k is None:
         tau_k = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
     if tau_v is None:
+        f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
+        for ff in range(7):
+            ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
+            f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
+            ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
         tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
 
     # Calculate TB
     TB = np.empty(len(f), np.float32)
-    for ff, freq in enumerate(f):
-        TB_ax = np.empty(0, np.float32)
-        for ia, _ in enumerate(ape_ang):
+    mu = MU_CALC(z_final, T_final, p_final, q_final, theta + ape_ang[0])
+    TB_k = TB_CALC(T_final, tau_k, mu, f[0:7]) * ape_wgh[0]
+    mu_org = MU_CALC(z_final, T_final, p_final, q_final, theta)
+    for ff in range(7):
+        TB_v = np.empty(0, np.float32)
+        fr_wgh = bdw_wgh[ff, bdw_fre[ff, :] >= 0.0] / np.sum(
+            bdw_wgh[ff, bdw_fre[ff, :] >= 0.0]
+        )
+        TB_org = np.sum(
+            TB_CALC(
+                T_final,
+                tau_v[:, ind1[ff] : ind1[ff + 1]],
+                mu_org,
+                f_all[ind1[ff] : ind1[ff + 1]],
+            )
+            * fr_wgh
+        )
+        for ia, aa in enumerate(ape_ang):
             # Refractive index
-            mu = MU_CALC(z_final, T_final, p_final, q_final, theta + ape_ang[ia])
+            mu = MU_CALC(z_final, T_final, p_final, q_final, theta + aa)
 
-            if ff < 7:
+            if (ff == 0) & (ia > 0):
                 # K-band calculations
-                TB_ax = np.hstack(
+                TB_k = np.vstack(
                     (
-                        TB_ax,
+                        TB_k,
                         TB_CALC(
                             T_final,
-                            np.expand_dims(tau_k[:, ff], axis=1),
+                            tau_k,
                             mu,
-                            np.expand_dims(np.asarray(freq), 0),
+                            f[0:7],
                         )
                         * ape_wgh[ia],
                     )
                 )
-            else:
-                # V-band calculations
-                fr_wgh = bdw_wgh[ff - 7, bdw_fre[ff - 7, :] >= 0.0] / np.sum(
-                    bdw_wgh[ff - 7, bdw_fre[ff - 7, :] >= 0.0]
-                )
-                TB_ax = np.hstack(
-                    (
-                        TB_ax,
-                        np.sum(
-                            TB_CALC(
-                                T_final,
-                                tau_v[:, ind1[ff - 7] : ind1[ff - 6]],
-                                mu,
-                                f_all[ind1[ff - 7] : ind1[ff - 6]],
-                            )
-                            * fr_wgh
+            # V-band calculations
+            TB_v = np.hstack(
+                (
+                    TB_v,
+                    np.sum(
+                        TB_CALC(
+                            T_final,
+                            tau_v[:, ind1[ff] : ind1[ff + 1]],
+                            mu,
+                            f_all[ind1[ff] : ind1[ff + 1]],
                         )
-                        * ape_wgh[ia],
+                        * fr_wgh
                     )
+                    * ape_wgh[ia],
                 )
-        TB[ff] = np.sum(TB_ax)
+            )
+        TB[ff + 7] = (np.sum(TB_v) + TB_org) / 2.0
+    TB[0:7] = (np.sum(TB_k, axis=0) + TB_CALC(T_final, tau_k, mu_org, f[0:7])) / 2.0
 
     return (
         TB,  # [K] brightness temperature array of f grid
         tau_k,  # total optical depth (K-band)
         tau_v,  # total optical depth (V-band, incl. bandwidth)
+        f_all,
+        ind1,
     )
 
 
 def GAUSS(ape_ang, theta):
     ape_sigma = (2.35 * 0.5) / np.sqrt(-1.0 * np.log(0.5))
     arg = np.abs((ape_ang - theta) / ape_sigma)
+    arg = arg[arg < 9.0]
 
     return np.exp(-arg * arg / 2) * arg
 

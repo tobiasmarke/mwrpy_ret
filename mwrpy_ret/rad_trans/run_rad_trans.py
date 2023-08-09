@@ -43,7 +43,7 @@ def rad_trans_rs(
             np.empty(0, np.float64),
             np.empty(0, np.float64),
         )
-        if len(top) in range(15):
+        if len(top) in np.linspace(1, 15, 15):
             for icl, _ in enumerate(top):
                 xcl = np.where((height >= base[icl]) & (height <= top[icl]))[0]
                 if len(xcl) > 1:
@@ -101,7 +101,7 @@ def rad_trans_rs(
 
         # Radiative transport
         tb = np.empty((1, len(freq), len(theta)), np.float32)
-        tb[0, :, 0], tau_k, tau_v = STP_IM10(
+        tb[0, :, 0], tau_k, tau_v, f_all, ind1 = STP_IM10(
             height_new,
             temperature_new,
             pressure_new,
@@ -109,10 +109,12 @@ def rad_trans_rs(
             lwc_new,
             theta[0],
             freq,
+            np.empty(0),
+            np.empty(0),
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _ = STP_IM10(
+                tb[0, :, i_ang + 1], _, _, _, _ = STP_IM10(
                     height_new,
                     temperature_new,
                     pressure_new,
@@ -120,6 +122,8 @@ def rad_trans_rs(
                     lwc_new,
                     theta[i_ang + 1],
                     freq,
+                    f_all,
+                    ind1,
                     tau_k,
                     tau_v,
                 )
