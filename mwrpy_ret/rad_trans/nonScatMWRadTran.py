@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 import mwrpy_ret.constants as con
+from mwrpy_ret.atmos import abshum_to_vap
 from mwrpy_ret.utils import dcerror, loadCoeffsJSON
 
 
@@ -28,19 +29,100 @@ def STP_IM10(
     q_final = np.asarray(q_final)
     f = np.asarray(f)
 
-    theta = np.deg2rad(theta)
-    mu = np.cos(theta) + 0.025 * np.exp(-11.0 * np.cos(theta))
-
-    # ****radiative transfer
+    # Calculate optical thickness
     if tau is None:
         tau = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
 
-    TB = TB_CALC(T_final, tau, mu, f)
+    # Aperture and bandwidth
+    ape_ini = np.linspace(-9.9, 9.9, 199)
+    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
+    ape_wgh = GAUSS(ape_ang + theta, theta)
+    ape_wgh = ape_wgh / np.sum(ape_wgh)
+
+    # Calculate TB
+    TB = np.empty(len(f), np.float32)
+    for ifr, freq in enumerate(f):
+        TB_ax = np.empty(0, np.float32)
+        for ia, _ in enumerate(ape_ang):
+            mu = MU_CALC(
+                z_final, T_final, p_final, q_final, np.abs(theta + ape_ang[ia])
+            )
+            TB_ax = np.hstack(
+                (TB_ax, TB_CALC(T_final, tau[:, ifr], mu, freq) * ape_wgh[ia])
+            )
+        TB[ifr] = np.sum(TB_ax)
 
     return (
         TB,  # [K] brightness temperature array of f grid
         tau,  # total optical depth
     )
+
+
+def GAUSS(ape_ang, theta):
+    ape_sigma = (2.35 * 0.5) / np.sqrt(-1.0 * np.log(0.5))
+    arg = np.abs((ape_ang - theta) / ape_sigma)
+
+    return np.exp(-arg * arg / 2) * arg
+
+
+def MU_CALC(
+    z,  # height [m]
+    T,  # Temp. [K]
+    p,  # press. [Pa]
+    rhow,  # abs. hum. [kg m^-3]
+    theta,  # zenith angle [deg]
+):
+    mu = np.zeros(len(z) - 1, np.float64)
+    deltas = np.zeros(len(z) - 1, np.float64)
+    coeff = [77.695, 71.97, 3.75406]
+    re = 6370950.0 + z[0]
+    e = abshum_to_vap(T, p, rhow)
+
+    theta_bot = np.deg2rad(theta)
+    r_bot = re
+
+    for iz in range(1, len(z)):
+        T_top = 0.5 * (T[iz] + T[iz - 1])
+        p_top = 0.5 * (p[iz] + p[iz - 1])
+        e_top = 0.5 * (e[iz] + e[iz - 1])
+        n_top = (
+            1.0
+            + (
+                coeff[0] * (((p_top / 100.0) - e_top) / T_top)
+                + coeff[1] * (e_top / T_top)
+                + coeff[2] * (e_top / (T_top**2))
+            )
+            * 1e-6
+        )
+
+        if iz > 1:
+            T_bot = 0.5 * (T[iz - 1] + T[iz - 2])
+            p_bot = 0.5 * (p[iz - 1] + p[iz - 2])
+            e_bot = 0.5 * (e[iz - 1] + e[iz - 2])
+            n_bot = (
+                1.0
+                + (
+                    coeff[0] * (((p_bot / 100.0) - e_bot) / T_bot)
+                    + coeff[1] * (e_bot / T_bot)
+                    + coeff[2] * (e_bot / (T_bot**2))
+                )
+                * 1e-6
+            )
+        else:
+            n_bot = n_top
+
+        deltaz = z[iz] - z[iz - 1]
+        r_top = r_bot + deltaz
+        theta_top = np.arcsin(((n_bot * r_bot) / (n_top * r_top)) * np.sin(theta_bot))
+        alpha = np.pi - theta_bot
+        deltas[iz - 1] = r_bot * np.cos(alpha) + np.sqrt(
+            r_top**2 + r_bot**2 * (np.cos(alpha) ** 2 - 1.0)
+        )
+        mu[iz - 1] = deltaz / deltas[iz - 1]
+        theta_bot = theta_top
+        r_bot = r_top
+
+    return mu
 
 
 def TAU_CALC(
@@ -367,26 +449,23 @@ def ABLIQ_R22(LWC, F, T):
     return ALPHA
 
 
-def TB_CALC(T, tau, mu_s, freq):
+def TB_CALC(T, tau, mu, freq):
     """
     calculate brightness temperatures without scattering
     according to Simmer (94) pp. 87 - 91 (alpha = 1, no scattering)
     """
     kmax = len(T)
-    n_f = len(freq)
 
-    mu = np.zeros(n_f) + mu_s
     freq_si = freq * 1e9
     lamda_si = con.c / freq_si
 
-    IN = np.zeros(n_f, dtype=np.float64) + 2.73
     IN = (
         (2.0 * con.h * freq_si / (lamda_si**2.0))
         * 1.0
-        / (np.exp(con.h * freq_si / (con.kB * IN)) - 1.0)
+        / (np.exp(con.h * freq_si / (con.kB * 2.73)) - 1.0)
     )
 
-    tau_top = np.zeros(n_f, dtype=np.float64)
+    tau_top = 0.0
     tau_bot = tau[kmax - 2]
     for i in range(kmax - 1):
         valid = 1
@@ -394,11 +473,10 @@ def TB_CALC(T, tau, mu_s, freq):
             tau_top = tau[kmax - 2 - i + 1]
             tau_bot = tau[kmax - 2 - i]
 
-        for ii in range(n_f):
-            if tau_bot[ii] == tau_top[ii]:
-                valid = 0
-            if tau_bot[ii] < tau_top[ii]:
-                valid = -1
+        if tau_bot == tau_top:
+            valid = 0
+        if tau_bot < tau_top:
+            valid = -1
         if valid == 0:
             print("warning, zero absorption coefficient")
         if valid == -1:
@@ -406,8 +484,8 @@ def TB_CALC(T, tau, mu_s, freq):
 
         if valid == 1:
             delta_tau = tau_bot - tau_top
-            A = np.ones(n_f, dtype=np.float64) - np.exp(-1 * delta_tau / mu)
-            B = delta_tau - mu + mu * np.exp(-1 * delta_tau / mu)
+            A = 1.0 - np.exp(-1 * delta_tau / mu[i])
+            B = delta_tau - mu[i] + mu[i] * np.exp(-1 * delta_tau / mu[i])
 
             T_pl2 = (
                 (2.0 * con.h * freq_si / (lamda_si**2.0))
@@ -420,7 +498,7 @@ def TB_CALC(T, tau, mu_s, freq):
                 / (np.exp(con.h * freq_si / (con.kB * T[kmax - 1 - i])) - 1)
             )
             diff = (T_pl2 - T_pl1) / delta_tau
-            IN = IN * np.exp(-1 * delta_tau / mu) + T_pl1 * A + diff * B
+            IN = IN * np.exp(-1 * delta_tau / mu[i]) + T_pl1 * A + diff * B
 
     TB = (
         (con.h * freq_si / con.kB)

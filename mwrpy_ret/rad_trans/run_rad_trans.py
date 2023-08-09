@@ -14,9 +14,8 @@ def rad_trans_rs(
     freq: np.ndarray,
     theta: np.ndarray,
 ) -> dict:
-    output: dict = {}
     with nc.Dataset(file_name) as rs_data:
-        # GPM to m
+        # Height (GPM to m)
         geopot = units.Quantity(
             rs_data.variables["geopotential_height"][:] * con.g0, "m^2/s^2"
         )
@@ -44,7 +43,7 @@ def rad_trans_rs(
             np.empty(0, np.float64),
             np.empty(0, np.float64),
         )
-        if len(top) > 0:
+        if len(top) in range(15):
             for icl, _ in enumerate(top):
                 xcl = np.where((height >= base[icl]) & (height <= top[icl]))[0]
                 if len(xcl) > 1:
@@ -80,71 +79,67 @@ def rad_trans_rs(
         pressure_new = interp_log_p(
             rs_data.variables["air_pressure"][:], height, height_new
         )
-        if np.min(pressure_new) >= 0.0:
-            temperature_new = np.interp(
-                height_new, height, rs_data.variables["air_temperature"][:] + con.T0
-            )
+        temperature_new = np.interp(
+            height_new, height, rs_data.variables["air_temperature"][:] + con.T0
+        )
+        relhum_new = np.interp(
+            height_new,
+            height,
+            rs_data.variables["relative_humidity"][:] / 100.0,
+        )
+        abshum_new = abs_hum(temperature_new, relhum_new)
 
-            relhum_new = np.interp(
-                height_new,
-                height,
-                rs_data.variables["relative_humidity"][:] / 100.0,
-            )
-
-            abshum_new = abs_hum(temperature_new, relhum_new)
-
+        # Distribute liquid water
+        lwc_new = np.zeros(len(height_new) - 1, np.float32)
+        if len(lwc) > 0:
             _, xx, _ = np.intersect1d(
                 height_new, cloud_new, assume_unique=True, return_indices=True
             )
-            lwc_new = np.zeros(len(height_new) - 1, np.float32)
             lwc_new[xx] = lwc
 
-            # Radiative transport
-            tb = np.empty((1, len(freq), len(theta)), np.float32)
-            tb[0, :, 0], tau = STP_IM10(
-                height_new,
-                temperature_new,
-                pressure_new,
-                abshum_new,
-                lwc_new,
-                theta[0],
-                freq,
-            )
-            if len(theta) > 1:
-                for i_ang in range(len(theta) - 1):
-                    tb[0, :, i_ang + 1], _ = STP_IM10(
-                        height_new,
-                        temperature_new,
-                        pressure_new,
-                        abshum_new,
-                        lwc_new,
-                        theta[i_ang + 1],
-                        freq,
-                        tau,
-                    )
+        # Radiative transport
+        tb = np.empty((1, len(freq), len(theta)), np.float32)
+        tb[0, :, 0], tau = STP_IM10(
+            height_new,
+            temperature_new,
+            pressure_new,
+            abshum_new,
+            lwc_new,
+            theta[0],
+            freq,
+        )
+        if len(theta) > 1:
+            for i_ang in range(len(theta) - 1):
+                tb[0, :, i_ang + 1], _ = STP_IM10(
+                    height_new,
+                    temperature_new,
+                    pressure_new,
+                    abshum_new,
+                    lwc_new,
+                    theta[i_ang + 1],
+                    freq,
+                    tau,
+                )
 
         # Interpolate to final grid
         pressure_int = interp_log_p(
             rs_data.variables["air_pressure"][:], height, height_int
         )
-        if np.min(pressure_int) >= 0.0:
-            temperature_int = np.interp(
-                height_int, height, rs_data.variables["air_temperature"][:] + con.T0
-            )
+        temperature_int = np.interp(
+            height_int, height, rs_data.variables["air_temperature"][:] + con.T0
+        )
+        relhum_int = np.interp(
+            height_int, height, rs_data.variables["relative_humidity"][:] / 100.0
+        )
+        abshum_int = abs_hum(temperature_int, relhum_int)
 
-            relhum_int = np.interp(
-                height_int, height, rs_data.variables["relative_humidity"][:] / 100.0
-            )
-
-            abshum_int = abs_hum(temperature_int, relhum_int)
-
-            output = {
-                "time": np.asarray([rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data]),
-                "tb": tb,
-                "temperature": np.expand_dims(temperature_int, 0),
-                "pressure": np.expand_dims(pressure_int, 0),
-                "absolute_humidity": np.expand_dims(abshum_int, 0),
-                "lwp": np.asarray([lwp]),
-                "iwv": np.asarray([iwv]),
-            }
+        output = {
+            "time": np.asarray([rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data]),
+            "tb": tb,
+            "temperature": np.expand_dims(temperature_int, 0),
+            "pressure": np.expand_dims(pressure_int, 0),
+            "absolute_humidity": np.expand_dims(abshum_int, 0),
+            "lwp": np.asarray([lwp]),
+            "iwv": np.asarray([iwv]),
+        }
     return output

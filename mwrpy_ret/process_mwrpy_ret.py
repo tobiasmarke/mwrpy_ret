@@ -53,12 +53,16 @@ def process_input(source: str, date: datetime.date, params: dict) -> dict:
         data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
         file_names = get_file_list(data_in)
         for file in file_names:
-            output_hour = rad_trans_rs(
-                file,
-                np.array(params["height"]) + params["altitude"],
-                np.array(params["frequency"]),
-                np.array(params["elevation_angle"]) - 90.0,
-            )
+            output_hour = None
+            try:
+                output_hour = rad_trans_rs(
+                    file,
+                    np.array(params["height"]) + params["altitude"],
+                    np.array(params["frequency"]),
+                    90.0 - np.array(params["elevation_angle"]),
+                )
+            except ValueError:
+                pass
             if output_hour is not None:
                 for key, array in output_hour.items():
                     output_day = append_data(output_day, key, array)
