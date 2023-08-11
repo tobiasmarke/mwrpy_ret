@@ -92,14 +92,14 @@ def rad_trans_rs(
         # Distribute liquid water
         lwc_new = np.zeros(len(height_new) - 1, np.float32)
         if len(lwc) > 0:
-            _, xx, _ = np.intersect1d(
+            _, xx, yy = np.intersect1d(
                 height_new, cloud_new, assume_unique=True, return_indices=True
             )
-            lwc_new[xx] = lwc
+            lwc_new[xx] = lwc[yy]
 
         # Radiative transport
         tb = np.empty((1, len(freq), len(theta)), np.float32)
-        tb[0, :, 0], tau = STP_IM10(
+        tb[0, :, 0], tau, tau_v = STP_IM10(
             height_new,
             temperature_new,
             pressure_new,
@@ -110,7 +110,7 @@ def rad_trans_rs(
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _ = STP_IM10(
+                tb[0, :, i_ang + 1], _, _ = STP_IM10(
                     height_new,
                     temperature_new,
                     pressure_new,
@@ -119,6 +119,7 @@ def rad_trans_rs(
                     theta[i_ang + 1],
                     freq,
                     tau,
+                    tau_v,
                 )
 
         # Interpolate to final grid

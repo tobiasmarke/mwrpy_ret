@@ -17,6 +17,7 @@ def STP_IM10(
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
     tau: np.ndarray | None = None,
+    tau_v: np.ndarray | None = None,
 ):
     """
     non-scattering microwave radiative transfer using Rosenkranz 1998 gas
@@ -29,32 +30,82 @@ def STP_IM10(
     q_final = np.asarray(q_final)
     f = np.asarray(f)
 
-    # Calculate optical thickness
-    if tau is None:
-        tau = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
-
-    # Aperture and bandwidth
+    # Antenna beamwidth
     ape_ini = np.linspace(-9.9, 9.9, 199)
     ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
     ape_wgh = GAUSS(ape_ang + theta, theta)
     ape_wgh = ape_wgh / np.sum(ape_wgh)
 
+    # Channel bandwidth
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/coeff/o2_bandpass_interp_freqs.json"
+    )
+    FFI = loadCoeffsJSON(path)
+    bdw_fre = FFI["FFI"].T
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/coeff/o2_bandpass_interp_norm_resp.json"
+    )
+    FRIN = loadCoeffsJSON(path)
+    bdw_wgh = FRIN["FRIN"].T
+    f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
+    for ff in range(7):
+        ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
+        f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
+        ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
+
+    # Calculate optical thickness
+    if tau is None:
+        tau = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
+    if tau_v is None:
+        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
+
     # Calculate TB
     TB = np.empty(len(f), np.float32)
-    for ifr, freq in enumerate(f):
+    for ff, freq in enumerate(f):
         TB_ax = np.empty(0, np.float32)
         for ia, _ in enumerate(ape_ang):
+            # Refractive index
             mu = MU_CALC(
                 z_final, T_final, p_final, q_final, np.abs(theta + ape_ang[ia])
             )
-            TB_ax = np.hstack(
-                (TB_ax, TB_CALC(T_final, tau[:, ifr], mu, freq) * ape_wgh[ia])
-            )
-        TB[ifr] = np.sum(TB_ax)
+            if ff < 7:
+                TB_ax = np.hstack(
+                    (
+                        TB_ax,
+                        TB_CALC(
+                            T_final,
+                            np.expand_dims(tau[:, ff], axis=1),
+                            mu,
+                            np.expand_dims(np.asarray(freq), 0),
+                        )
+                        * ape_wgh[ia],
+                    )
+                )
+            else:
+                fr_wgh = bdw_wgh[ff - 7, :] / np.sum(bdw_wgh[ff - 7, :])
+                TB_ax = np.hstack(
+                    (
+                        TB_ax,
+                        np.sum(
+                            TB_CALC(
+                                T_final,
+                                tau_v[:, ind1[ff - 7] : ind1[ff - 6] - 1],
+                                mu,
+                                f_all[ind1[ff - 7] : ind1[ff - 6] - 1],
+                            )
+                            * fr_wgh[1:]
+                        )
+                        * ape_wgh[ia],
+                    )
+                )
+        TB[ff] = np.sum(TB_ax)
 
     return (
         TB,  # [K] brightness temperature array of f grid
         tau,  # total optical depth
+        tau_v,
     )
 
 
@@ -455,36 +506,39 @@ def TB_CALC(T, tau, mu, freq):
     according to Simmer (94) pp. 87 - 91 (alpha = 1, no scattering)
     """
     kmax = len(T)
-
+    n_f = len(freq)
     freq_si = freq * 1e9
     lamda_si = con.c / freq_si
 
+    IN = np.zeros(n_f, dtype=np.float64) + 2.73
     IN = (
         (2.0 * con.h * freq_si / (lamda_si**2.0))
         * 1.0
-        / (np.exp(con.h * freq_si / (con.kB * 2.73)) - 1.0)
+        / (np.exp(con.h * freq_si / (con.kB * IN)) - 1.0)
     )
 
-    tau_top = 0.0
-    tau_bot = tau[kmax - 2]
+    tau_top = np.zeros(n_f, dtype=np.float64)
+    tau_bot = tau[kmax - 2, :]
     for i in range(kmax - 1):
         valid = 1
         if i > 0:
-            tau_top = tau[kmax - 2 - i + 1]
-            tau_bot = tau[kmax - 2 - i]
-
-        if tau_bot == tau_top:
-            valid = 0
-        if tau_bot < tau_top:
-            valid = -1
-        if valid == 0:
-            print("warning, zero absorption coefficient")
-        if valid == -1:
-            print("warning, negative absorption coefficient")
+            tau_top = tau[kmax - 2 - i + 1, :]
+            tau_bot = tau[kmax - 2 - i, :]
+        if n_f > 1:
+            for ii in range(n_f):
+                if tau_bot[ii] == tau_top[ii]:
+                    valid = 0
+                if tau_bot[ii] < tau_top[ii]:
+                    valid = -1
+        else:
+            if tau_bot == tau_top:
+                valid = 0
+            if tau_bot < tau_top:
+                valid = -1
 
         if valid == 1:
             delta_tau = tau_bot - tau_top
-            A = 1.0 - np.exp(-1 * delta_tau / mu[i])
+            A = np.ones(n_f, dtype=np.float64) - np.exp(-1 * delta_tau / mu[i])
             B = delta_tau - mu[i] + mu[i] * np.exp(-1 * delta_tau / mu[i])
 
             T_pl2 = (

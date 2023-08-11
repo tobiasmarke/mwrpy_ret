@@ -27,8 +27,10 @@ def main(args):
     data_nc: dict = {}
     for date in date_range(start_date, stop_date):
         output_day = process_input(args.command, date, params)
-        logging.info(f"Radiative transfer using {args.command} for {args.site}, {date}")
         if output_day is not None:
+            logging.info(
+                f"Radiative transfer using {args.command} for {args.site}, {date}"
+            )
             for key in output_day:
                 data_nc = append_data(data_nc, key, output_day[key])
 
@@ -62,7 +64,7 @@ def process_input(source: str, date: datetime.date, params: dict) -> dict:
                     90.0 - np.array(params["elevation_angle"]),
                 )
             except ValueError:
-                pass
+                logging.info(f"Skipping file {file}")
             if output_hour is not None:
                 for key, array in output_hour.items():
                     output_day = append_data(output_day, key, array)
