@@ -1,3 +1,9 @@
+## 0.3.0 – 2023-08-30
+
+- Refactor beamwidth calculation
+- Include bandwidth
+- Include beamwidth
+
 ## 0.2.0 – 2023-08-08
 
 - Fixed height & pressure
