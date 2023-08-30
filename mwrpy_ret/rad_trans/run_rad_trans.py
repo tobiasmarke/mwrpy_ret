@@ -72,8 +72,18 @@ def rad_trans_rs(
             # New vertical grid
             height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
             height_new = np.sort(np.hstack((height_new, cloud_new)))
+
+            # Distribute liquid water
+            lwc_new = np.zeros(len(height_new) - 1, np.float32)
+            if len(lwc) > 0:
+                _, xx, yy = np.intersect1d(
+                    height_new, cloud_new, assume_unique=True, return_indices=True
+                )
+                lwc_new[xx] = lwc[yy]
+
         else:
             height_new = height_int
+            lwc_new = np.zeros(len(height_new) - 1, np.float32)
 
         # Interpolate to new grid
         pressure_new = interp_log_p(
@@ -89,17 +99,9 @@ def rad_trans_rs(
         )
         abshum_new = abs_hum(temperature_new, relhum_new)
 
-        # Distribute liquid water
-        lwc_new = np.zeros(len(height_new) - 1, np.float32)
-        if len(lwc) > 0:
-            _, xx, yy = np.intersect1d(
-                height_new, cloud_new, assume_unique=True, return_indices=True
-            )
-            lwc_new[xx] = lwc[yy]
-
         # Radiative transport
         tb = np.empty((1, len(freq), len(theta)), np.float32)
-        tb[0, :, 0], tau, tau_v = STP_IM10(
+        tb[0, :, 0], tau_k, tau_v = STP_IM10(
             height_new,
             temperature_new,
             pressure_new,
@@ -118,7 +120,7 @@ def rad_trans_rs(
                     lwc_new,
                     theta[i_ang + 1],
                     freq,
-                    tau,
+                    tau_k,
                     tau_v,
                 )
 
