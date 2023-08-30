@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 import mwrpy_ret.constants as con
+from mwrpy_ret.atmos import abshum_to_vap
 from mwrpy_ret.utils import dcerror, loadCoeffsJSON
 
 
@@ -15,7 +16,8 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
-    tau: np.ndarray | None = None,
+    tau_k: np.ndarray | None = None,
+    tau_v: np.ndarray | None = None,
 ):
     """
     non-scattering microwave radiative transfer using Rosenkranz 1998 gas
@@ -28,19 +30,94 @@ def STP_IM10(
     q_final = np.asarray(q_final)
     f = np.asarray(f)
 
-    theta = np.deg2rad(theta)
-    mu = np.cos(theta) + 0.025 * np.exp(-11.0 * np.cos(theta))
+    # Antenna beamwidth
+    ape_ini = np.linspace(-9.9, 9.9, 199)
+    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
+    ape_ang = ape_ang[ape_ang >= 0.0]
+    ape_wgh = GAUSS(ape_ang + theta, theta)
+    ape_wgh = ape_wgh / np.sum(ape_wgh)
 
-    # ****radiative transfer
-    if tau is None:
-        tau = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f)
+    # Channel bandwidth
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/coeff/o2_bandpass_interp_freqs.json"
+    )
+    FFI = loadCoeffsJSON(path)
+    bdw_fre = FFI["FFI"].T
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/coeff/o2_bandpass_interp_norm_resp.json"
+    )
+    FRIN = loadCoeffsJSON(path)
+    bdw_wgh = FRIN["FRIN"].T
+    f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
+    for ff in range(7):
+        ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
+        f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
+        ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
 
-    TB = TB_CALC(T_final, tau, mu, f)
+    # Calculate optical thickness
+    if tau_k is None:
+        tau_k = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
+    if tau_v is None:
+        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
+
+    # Calculate TB
+    TB = np.empty(len(f), np.float32)
+    for ff, freq in enumerate(f):
+        TB_ax = np.empty(0, np.float32)
+        for ia, _ in enumerate(ape_ang):
+            # Refractive index
+            mu = MU_CALC(z_final, T_final, p_final, q_final, theta + ape_ang[ia])
+
+            if ff < 7:
+                # K-band calculations
+                TB_ax = np.hstack(
+                    (
+                        TB_ax,
+                        TB_CALC(
+                            T_final,
+                            np.expand_dims(tau_k[:, ff], axis=1),
+                            mu,
+                            np.expand_dims(np.asarray(freq), 0),
+                        )
+                        * ape_wgh[ia],
+                    )
+                )
+            else:
+                # V-band calculations
+                fr_wgh = bdw_wgh[ff - 7, bdw_fre[ff - 7, :] >= 0.0] / np.sum(
+                    bdw_wgh[ff - 7, bdw_fre[ff - 7, :] >= 0.0]
+                )
+                TB_ax = np.hstack(
+                    (
+                        TB_ax,
+                        np.sum(
+                            TB_CALC(
+                                T_final,
+                                tau_v[:, ind1[ff - 7] : ind1[ff - 6]],
+                                mu,
+                                f_all[ind1[ff - 7] : ind1[ff - 6]],
+                            )
+                            * fr_wgh
+                        )
+                        * ape_wgh[ia],
+                    )
+                )
+        TB[ff] = np.sum(TB_ax)
 
     return (
         TB,  # [K] brightness temperature array of f grid
-        tau,  # total optical depth
+        tau_k,  # total optical depth (K-band)
+        tau_v,  # total optical depth (V-band, incl. bandwidth)
     )
+
+
+def GAUSS(ape_ang, theta):
+    ape_sigma = (2.35 * 0.5) / np.sqrt(-1.0 * np.log(0.5))
+    arg = np.abs((ape_ang - theta) / ape_sigma)
+
+    return np.exp(-arg * arg / 2) * arg
 
 
 def TAU_CALC(
@@ -367,15 +444,73 @@ def ABLIQ_R22(LWC, F, T):
     return ALPHA
 
 
-def TB_CALC(T, tau, mu_s, freq):
+def MU_CALC(
+    z,  # height [m]
+    T,  # Temp. [K]
+    p,  # press. [Pa]
+    rhow,  # abs. hum. [kg m^-3]
+    theta,  # zenith angle [deg]
+):
+    mu = np.zeros(len(z) - 1, np.float64)
+    deltas = np.zeros(len(z) - 1, np.float64)
+    coeff = [77.695, 71.97, 3.75406]
+    re = 6370950.0 + z[0]
+    e = abshum_to_vap(T, p, rhow)
+
+    theta_bot = np.deg2rad(theta)
+    r_bot = re
+
+    for iz in range(1, len(z)):
+        T_top = 0.5 * (T[iz] + T[iz - 1])
+        p_top = 0.5 * (p[iz] + p[iz - 1])
+        e_top = 0.5 * (e[iz] + e[iz - 1])
+        n_top = (
+            1.0
+            + (
+                coeff[0] * (((p_top / 100.0) - e_top) / T_top)
+                + coeff[1] * (e_top / T_top)
+                + coeff[2] * (e_top / (T_top**2))
+            )
+            * 1e-6
+        )
+
+        if iz > 1:
+            T_bot = 0.5 * (T[iz - 1] + T[iz - 2])
+            p_bot = 0.5 * (p[iz - 1] + p[iz - 2])
+            e_bot = 0.5 * (e[iz - 1] + e[iz - 2])
+            n_bot = (
+                1.0
+                + (
+                    coeff[0] * (((p_bot / 100.0) - e_bot) / T_bot)
+                    + coeff[1] * (e_bot / T_bot)
+                    + coeff[2] * (e_bot / (T_bot**2))
+                )
+                * 1e-6
+            )
+        else:
+            n_bot = n_top
+
+        deltaz = z[iz] - z[iz - 1]
+        r_top = r_bot + deltaz
+        theta_top = np.arcsin(((n_bot * r_bot) / (n_top * r_top)) * np.sin(theta_bot))
+        alpha = np.pi - theta_bot
+        deltas[iz - 1] = r_bot * np.cos(alpha) + np.sqrt(
+            r_top**2 + r_bot**2 * (np.cos(alpha) ** 2 - 1.0)
+        )
+        mu[iz - 1] = deltaz / deltas[iz - 1]
+        theta_bot = theta_top
+        r_bot = r_top
+
+    return mu
+
+
+def TB_CALC(T, tau, mu, freq):
     """
     calculate brightness temperatures without scattering
     according to Simmer (94) pp. 87 - 91 (alpha = 1, no scattering)
     """
     kmax = len(T)
     n_f = len(freq)
-
-    mu = np.zeros(n_f) + mu_s
     freq_si = freq * 1e9
     lamda_si = con.c / freq_si
 
@@ -387,27 +522,28 @@ def TB_CALC(T, tau, mu_s, freq):
     )
 
     tau_top = np.zeros(n_f, dtype=np.float64)
-    tau_bot = tau[kmax - 2]
+    tau_bot = tau[kmax - 2, :]
     for i in range(kmax - 1):
         valid = 1
         if i > 0:
-            tau_top = tau[kmax - 2 - i + 1]
-            tau_bot = tau[kmax - 2 - i]
-
-        for ii in range(n_f):
-            if tau_bot[ii] == tau_top[ii]:
+            tau_top = tau[kmax - 2 - i + 1, :]
+            tau_bot = tau[kmax - 2 - i, :]
+        if n_f > 1:
+            for ii in range(n_f):
+                if tau_bot[ii] == tau_top[ii]:
+                    valid = 0
+                if tau_bot[ii] < tau_top[ii]:
+                    valid = -1
+        else:
+            if tau_bot == tau_top:
                 valid = 0
-            if tau_bot[ii] < tau_top[ii]:
+            if tau_bot < tau_top:
                 valid = -1
-        if valid == 0:
-            print("warning, zero absorption coefficient")
-        if valid == -1:
-            print("warning, negative absorption coefficient")
 
         if valid == 1:
             delta_tau = tau_bot - tau_top
-            A = np.ones(n_f, dtype=np.float64) - np.exp(-1 * delta_tau / mu)
-            B = delta_tau - mu + mu * np.exp(-1 * delta_tau / mu)
+            A = np.ones(n_f, dtype=np.float64) - np.exp(-1 * delta_tau / mu[i])
+            B = delta_tau - mu[i] + mu[i] * np.exp(-1 * delta_tau / mu[i])
 
             T_pl2 = (
                 (2.0 * con.h * freq_si / (lamda_si**2.0))
@@ -420,7 +556,7 @@ def TB_CALC(T, tau, mu_s, freq):
                 / (np.exp(con.h * freq_si / (con.kB * T[kmax - 1 - i])) - 1)
             )
             diff = (T_pl2 - T_pl1) / delta_tau
-            IN = IN * np.exp(-1 * delta_tau / mu) + T_pl1 * A + diff * B
+            IN = IN * np.exp(-1 * delta_tau / mu[i]) + T_pl1 * A + diff * B
 
     TB = (
         (con.h * freq_si / con.kB)

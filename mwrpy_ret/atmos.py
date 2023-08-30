@@ -38,6 +38,12 @@ def calc_saturation_vapor_pressure(temperature: np.ndarray) -> np.ndarray:
     ) * HPA_TO_P
 
 
+def abshum_to_vap(T, p, rho):
+    e = rho * con.RW * T
+    m = con.MW_RATIO * e / (p - e) / 1000.0
+    return p * m / (con.MW_RATIO + m)
+
+
 def rh2a(rh, T):
     """
     Calculate the absolute humidity from relative humidity, air temperature,
@@ -53,8 +59,7 @@ def rh2a(rh, T):
     """
 
     e = rh * calc_saturation_vapor_pressure(T)
-    a = e / (con.RW * T)
-    return a
+    return e / (con.RW * T)
 
 
 def moist_rho_rh(p, T, rh):
@@ -251,7 +256,5 @@ def pseudoAdiabLapseRate(T, Ws):
 
 def interp_log_p(p, z, z_int):
     p_interp = np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
-    # _, xx, yy = np.intersect1d(z_int, z, return_indices=True)
-    # p_interp[xx] = p[yy]
 
     return p_interp * HPA_TO_P
