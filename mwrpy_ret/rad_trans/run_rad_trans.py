@@ -13,6 +13,11 @@ def rad_trans_rs(
     height_int: np.ndarray,
     freq: np.ndarray,
     theta: np.ndarray,
+    bdw_fre: np.ndarray,
+    bdw_wgh: np.ndarray,
+    f_all: np.ndarray,
+    ind1: np.ndarray,
+    ape_ang: np.ndarray,
 ) -> dict:
     with nc.Dataset(file_name) as rs_data:
         # Height (GPM to m)
@@ -101,7 +106,7 @@ def rad_trans_rs(
 
         # Radiative transport
         tb = np.empty((1, len(freq), len(theta)), np.float32)
-        tb[0, :, 0], tau_k, tau_v, f_all, ind1 = STP_IM10(
+        tb[0, :, 0], tau_k, tau_v = STP_IM10(
             height_new,
             temperature_new,
             pressure_new,
@@ -109,12 +114,15 @@ def rad_trans_rs(
             lwc_new,
             theta[0],
             freq,
-            np.empty(0),
-            np.empty(0),
+            bdw_fre,
+            bdw_wgh,
+            f_all,
+            ind1,
+            ape_ang,
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _, _, _ = STP_IM10(
+                tb[0, :, i_ang + 1], _, _ = STP_IM10(
                     height_new,
                     temperature_new,
                     pressure_new,
@@ -122,8 +130,11 @@ def rad_trans_rs(
                     lwc_new,
                     theta[i_ang + 1],
                     freq,
+                    bdw_fre,
+                    bdw_wgh,
                     f_all,
                     ind1,
+                    ape_ang,
                     tau_k,
                     tau_v,
                 )

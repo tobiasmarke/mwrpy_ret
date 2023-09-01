@@ -8,12 +8,14 @@ from mwrpy_ret import ret_mwr
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
 from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_rs
 from mwrpy_ret.utils import (
+    GAUSS,
     _get_filename,
     append_data,
     date_range,
     get_file_list,
     get_processing_dates,
     isodate2date,
+    loadCoeffsJSON,
     read_yaml_config,
 )
 
@@ -51,6 +53,30 @@ def main(args):
 
 def process_input(source: str, date: datetime.date, params: dict) -> dict:
     output_day: dict = {}
+    # Channel bandwidth
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_freqs.json"
+    )
+    FFI = loadCoeffsJSON(path)
+    bdw_fre = FFI["FFI"].T
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_norm_resp.json"
+    )
+    FRIN = loadCoeffsJSON(path)
+    bdw_wgh = FRIN["FRIN"].T
+    f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
+    for ff in range(7):
+        ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
+        f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
+        ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
+
+    # Antenna beamwidth
+    ape_ini = np.linspace(-9.9, 9.9, 199)
+    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
+    ape_ang = ape_ang[ape_ang >= 0.0]
+
     if source == "radiosonde":
         data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
         file_names = get_file_list(data_in)
@@ -62,6 +88,11 @@ def process_input(source: str, date: datetime.date, params: dict) -> dict:
                     np.array(params["height"]) + params["altitude"],
                     np.array(params["frequency"]),
                     90.0 - np.array(params["elevation_angle"]),
+                    bdw_fre,
+                    bdw_wgh,
+                    f_all,
+                    ind1,
+                    ape_ang,
                 )
             except ValueError:
                 logging.info(f"Skipping file {file}")

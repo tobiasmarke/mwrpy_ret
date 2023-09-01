@@ -4,7 +4,7 @@ import numpy as np
 
 import mwrpy_ret.constants as con
 from mwrpy_ret.atmos import abshum_to_vap
-from mwrpy_ret.utils import dcerror, loadCoeffsJSON
+from mwrpy_ret.utils import GAUSS, dcerror, loadCoeffsJSON
 
 
 def STP_IM10(
@@ -16,8 +16,11 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
+    bdw_fre: np.ndarray,
+    bdw_wgh: np.ndarray,
     f_all: np.ndarray,
     ind1: np.ndarray,
+    ape_ang: np.ndarray,
     tau_k: np.ndarray | None = None,
     tau_v: np.ndarray | None = None,
 ):
@@ -33,35 +36,13 @@ def STP_IM10(
     f = np.asarray(f)
 
     # Antenna beamwidth
-    ape_ini = np.linspace(-9.9, 9.9, 199)
-    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
-    ape_ang = ape_ang[ape_ang >= 0.0]
     ape_wgh = GAUSS(ape_ang + theta, theta)
     ape_wgh = ape_wgh / np.sum(ape_wgh)
-
-    # Channel bandwidth
-    path = (
-        os.path.dirname(os.path.realpath(__file__))
-        + "/coeff/o2_bandpass_interp_freqs.json"
-    )
-    FFI = loadCoeffsJSON(path)
-    bdw_fre = FFI["FFI"].T
-    path = (
-        os.path.dirname(os.path.realpath(__file__))
-        + "/coeff/o2_bandpass_interp_norm_resp.json"
-    )
-    FRIN = loadCoeffsJSON(path)
-    bdw_wgh = FRIN["FRIN"].T
 
     # Calculate optical thickness
     if tau_k is None:
         tau_k = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
     if tau_v is None:
-        f_all, ind1 = np.empty(0, np.float32), np.zeros(1, np.int32)
-        for ff in range(7):
-            ifr = np.where(bdw_fre[ff, :] >= 0.0)[0]
-            f_all = np.hstack((f_all, bdw_fre[ff, ifr]))
-            ind1 = np.hstack((ind1, ind1[len(ind1) - 1] + len(ifr)))
         tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
 
     # Calculate TB
@@ -124,17 +105,7 @@ def STP_IM10(
         TB,  # [K] brightness temperature array of f grid
         tau_k,  # total optical depth (K-band)
         tau_v,  # total optical depth (V-band, incl. bandwidth)
-        f_all,
-        ind1,
     )
-
-
-def GAUSS(ape_ang, theta):
-    ape_sigma = (2.35 * 0.5) / np.sqrt(-1.0 * np.log(0.5))
-    arg = np.abs((ape_ang - theta) / ape_sigma)
-    arg = arg[arg < 9.0]
-
-    return np.exp(-arg * arg / 2) * arg
 
 
 def TAU_CALC(
