@@ -82,7 +82,7 @@ def rad_trans_rs(
             lwc_new = np.zeros(len(height_new) - 1, np.float32)
             if len(lwc) > 0:
                 _, xx, yy = np.intersect1d(
-                    height_new, cloud_new, assume_unique=True, return_indices=True
+                    height_new, cloud_new, assume_unique=False, return_indices=True
                 )
                 lwc_new[xx] = lwc[yy]
 
