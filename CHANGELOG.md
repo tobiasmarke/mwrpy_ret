@@ -1,3 +1,9 @@
+## 0.3.1 – 2023-09-14
+
+- Fix height indexing
+- Pre-load bandwidth coeffs
+- Refactor K-/V-band calculations
+
 ## 0.3.0 – 2023-08-30
 
 - Refactor beamwidth calculation
