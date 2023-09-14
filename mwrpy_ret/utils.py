@@ -206,3 +206,11 @@ def dcerror(x, y):
         DCERROR = w
         DCERROR[y < 0] = w2[y < 0]
         return DCERROR
+
+
+def GAUSS(ape_ang, theta):
+    ape_sigma = (2.35 * 0.5) / np.sqrt(-1.0 * np.log(0.5))
+    arg = np.abs((ape_ang - theta) / ape_sigma)
+    arg = arg[arg < 9.0]
+
+    return np.exp(-arg * arg / 2) * arg

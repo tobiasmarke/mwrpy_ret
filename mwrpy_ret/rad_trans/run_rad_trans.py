@@ -13,6 +13,11 @@ def rad_trans_rs(
     height_int: np.ndarray,
     freq: np.ndarray,
     theta: np.ndarray,
+    bdw_fre: np.ndarray,
+    bdw_wgh: np.ndarray,
+    f_all: np.ndarray,
+    ind1: np.ndarray,
+    ape_ang: np.ndarray,
 ) -> dict:
     with nc.Dataset(file_name) as rs_data:
         # Height (GPM to m)
@@ -43,7 +48,7 @@ def rad_trans_rs(
             np.empty(0, np.float64),
             np.empty(0, np.float64),
         )
-        if len(top) in range(15):
+        if len(top) in np.linspace(1, 15, 15):
             for icl, _ in enumerate(top):
                 xcl = np.where((height >= base[icl]) & (height <= top[icl]))[0]
                 if len(xcl) > 1:
@@ -77,7 +82,7 @@ def rad_trans_rs(
             lwc_new = np.zeros(len(height_new) - 1, np.float32)
             if len(lwc) > 0:
                 _, xx, yy = np.intersect1d(
-                    height_new, cloud_new, assume_unique=True, return_indices=True
+                    height_new, cloud_new, assume_unique=False, return_indices=True
                 )
                 lwc_new[xx] = lwc[yy]
 
@@ -109,6 +114,11 @@ def rad_trans_rs(
             lwc_new,
             theta[0],
             freq,
+            bdw_fre,
+            bdw_wgh,
+            f_all,
+            ind1,
+            ape_ang,
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
@@ -120,6 +130,11 @@ def rad_trans_rs(
                     lwc_new,
                     theta[i_ang + 1],
                     freq,
+                    bdw_fre,
+                    bdw_wgh,
+                    f_all,
+                    ind1,
+                    ape_ang,
                     tau_k,
                     tau_v,
                 )
