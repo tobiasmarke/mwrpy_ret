@@ -1,5 +1,5 @@
 [TYPECHECK]
-ignored-modules	= numpy, netCDF4, torch, numba, xarray, metpy
+ignored-modules	= numpy, netCDF4, torch, numba, xarray, metpy, cdsapi
 
 [MESSAGES CONTROL]
 disable =
