@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 from mwrpy_ret import ret_mwr
+from mwrpy_ret.era5_download.get_era5 import era5_request
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
 from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_rs
 from mwrpy_ret.utils import (
@@ -26,29 +27,32 @@ def main(args):
     start_date = isodate2date(_start_date)
     stop_date = isodate2date(_stop_date)
     global_attributes, params = read_yaml_config(args.site)
-    data_nc: dict = {}
-    for date in date_range(start_date, stop_date):
-        output_day = process_input(args.command, date, params)
-        if output_day is not None:
-            logging.info(
-                f"Radiative transfer using {args.command} for {args.site}, {date}"
-            )
-            for key in output_day:
-                data_nc = append_data(data_nc, key, output_day[key])
+    if args.command == "era5":
+        era5_request(args.site, params, start_date, stop_date)
+    else:
+        data_nc: dict = {}
+        for date in date_range(start_date, stop_date):
+            output_day = process_input(args.command, date, params)
+            if output_day is not None:
+                logging.info(
+                    f"Radiative transfer using {args.command} for {args.site}, {date}"
+                )
+                for key in output_day:
+                    data_nc = append_data(data_nc, key, output_day[key])
 
-    data_nc["height"] = np.array(params["height"]) + params["altitude"]
-    data_nc["frequency"] = np.array(params["frequency"])
-    data_nc["elevation_angle"] = np.array(params["elevation_angle"])
+        data_nc["height"] = np.array(params["height"]) + params["altitude"]
+        data_nc["frequency"] = np.array(params["frequency"])
+        data_nc["elevation_angle"] = np.array(params["elevation_angle"])
 
-    output_file = _get_filename(args.command, start_date, stop_date, args.site)
-    output_dir = os.path.dirname(output_file)
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    if ("time" in data_nc) & (output_file is not None):
-        ret_in = ret_mwr.Ret(data_nc)
-        ret_in.data = get_data_attributes(ret_in.data, args.command)
-        logging.info(f"Saving output file {output_file}")
-        ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
+        output_file = _get_filename(args.command, start_date, stop_date, args.site)
+        output_dir = os.path.dirname(output_file)
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        if ("time" in data_nc) & (output_file is not None):
+            ret_in = ret_mwr.Ret(data_nc)
+            ret_in.data = get_data_attributes(ret_in.data, args.command)
+            logging.info(f"Saving output file {output_file}")
+            ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
 
 
 def process_input(source: str, date: datetime.date, params: dict) -> dict:

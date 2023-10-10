@@ -20,7 +20,7 @@ def _parse_args(args):
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["radiosonde", "model"],
+        choices=["radiosonde", "model", "era5"],
         default="model",
         help="Command to execute.",
     )

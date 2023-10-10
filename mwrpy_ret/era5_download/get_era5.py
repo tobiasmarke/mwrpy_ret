@@ -3,11 +3,19 @@ import datetime
 import cdsapi
 import numpy as np
 
-from mwrpy_ret.utils import _get_filename, read_yaml_config
+from mwrpy_ret.utils import _get_filename
 
 
-def era5_request(site: str, start_date: datetime.date, stop_date: datetime.date):
-    _, params = read_yaml_config(site)
+def era5_request(
+    site: str, params: dict, start_date: datetime.date, stop_date: datetime.date
+):
+    """Function to download ERA5 data from CDS API for specified site and dates
+    Args:
+        site: Name of site
+        params: config dictionary
+        start_date: first day of request
+        stop_date: last day of request
+    """
     output_file = _get_filename("era5", start_date, stop_date, site)
 
     lat_box = get_corner_coord(
@@ -28,12 +36,11 @@ def era5_request(site: str, start_date: datetime.date, stop_date: datetime.date)
             "dataset": "era5",
             "date": str(start_date) + "/to/" + str(stop_date),
             "expver": "1",
-            "levelist": "1/to/137/by/1",
+            "levelist": "1/to/137",
             "levtype": "ml",
-            "number": "0/to/9/by/1",
-            "param": "129/130/133/134/137/157/164",
-            "stream": "enda",
-            "time": "00/to/23/by/3",
+            "param": "129/130/133/152/246/248",
+            "stream": "oper",
+            "time": "00/to/23/by/1",
             "type": "an",
             "grid": grid_str,
             "area": area_str,
