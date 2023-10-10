@@ -161,3 +161,37 @@ def rad_trans_rs(
             "iwv": np.asarray([iwv]),
         }
     return output
+
+
+def rad_trans_mod(
+    temperature: np.ndarray,
+    humidity: np.ndarray,
+    geopotential: np.ndarray,
+    clwc: np.ndarray,
+    height_int: np.ndarray,
+    freq: np.ndarray,
+    theta: np.ndarray,
+    bdw_fre: np.ndarray,
+    bdw_wgh: np.ndarray,
+    f_all: np.ndarray,
+    ind1: np.ndarray,
+    ape_ang: np.ndarray,
+) -> dict:
+    output: dict = {}
+    print(
+        [
+            temperature,
+            humidity,
+            geopotential,
+            clwc,
+            height_int,
+            freq,
+            theta,
+            bdw_fre,
+            bdw_wgh,
+            f_all,
+            ind1,
+            ape_ang,
+        ]
+    )
+    return output
