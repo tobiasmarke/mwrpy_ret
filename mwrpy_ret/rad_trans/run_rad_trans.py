@@ -167,6 +167,7 @@ def rad_trans_mod(
     temperature: np.ndarray,
     humidity: np.ndarray,
     geopotential: np.ndarray,
+    pressure,
     clwc: np.ndarray,
     height_int: np.ndarray,
     freq: np.ndarray,
@@ -178,11 +179,23 @@ def rad_trans_mod(
     ape_ang: np.ndarray,
 ) -> dict:
     output: dict = {}
+    # geopot = units.Quantity(geopotential, "m^2/s^2")
+    # height = metpy.calc.geopotential_to_height(geopot).magnitude
+    # temperature = units.Quantity(temperature, "K")
+    # rel_hum = metpy.calc.relative_humidity_from_specific_humidity(
+    #     pressure * units.Pa,
+    #     temperature,
+    #     humidity
+    # )
+    # iwv = rh_to_iwv(temperature.magnitude, rel_hum, height)
+    # top, base = detect_liq_cloud(height, temperature.magnitude, rel_hum, pressure)
+
     print(
         [
             temperature,
             humidity,
             geopotential,
+            pressure,
             clwc,
             height_int,
             freq,

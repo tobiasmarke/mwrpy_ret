@@ -4,9 +4,9 @@ import os
 
 import netCDF4 as nc
 import numpy as np
-import pandas as pd
 
 from mwrpy_ret import ret_mwr
+from mwrpy_ret.atmos import era5_geopot
 from mwrpy_ret.era5_download.get_era5 import era5_request
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
 from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_mod, rad_trans_rs
@@ -121,15 +121,18 @@ def process_input(
             + "_"
             + stop_date.strftime("%Y%m%d")
         )
-        file_mh = (
-            os.path.dirname(os.path.realpath(__file__))
-            + "/rad_trans/coeff/era5_model_levels_137.csv"
-        )
-        mod_lvl = pd.read_csv(file_mh)
+
         if len(file_name) == 1:
             with nc.Dataset(file_name[0]) as mod_data:
                 for index, hour in enumerate(mod_data["time"]):
                     date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
+                    geopot, pres = era5_geopot(
+                        mod_data["level"][:],
+                        np.mean(np.exp(mod_data["lnsp"][index, 0, :, :]), axis=(0, 1)),
+                        np.mean(mod_data["z"][index, 0, :, :], axis=(0, 1)),
+                        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2)),
+                        np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)),
+                    )
                     output_hour = None
                     try:
                         output_hour = rad_trans_mod(
@@ -139,11 +142,8 @@ def process_input(
                             np.flip(
                                 np.mean(mod_data["q"][index, :, :, :], axis=(1, 2))
                             ),
-                            np.flip(
-                                mod_lvl["Geometric Altitude [m]"]
-                                .values[1:]
-                                .astype("float")
-                            ),
+                            geopot,
+                            pres,
                             np.flip(
                                 np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2))
                             ),
