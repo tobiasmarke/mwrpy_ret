@@ -144,14 +144,7 @@ def process_input(
                         logging.info(f"Skipping time {date_i}")
                     if output_hour is not None:
                         for key, array in output_hour.items():
-                            output_day = append_data(output_day, key, array)
-
-                if output_day is not None:
-                    logging.info(
-                        f"Radiative transfer using {source} for {site}, {date_i[:-3]}"
-                    )
-                    for key in output_day:
-                        data_nc = append_data(data_nc, key, output_day[key])
+                            data_nc = append_data(output_hour, key, array)
 
     return data_nc
 

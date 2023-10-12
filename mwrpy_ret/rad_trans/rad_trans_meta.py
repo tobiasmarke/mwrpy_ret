@@ -75,19 +75,19 @@ ATTRIBUTES_RS = {
         standard_name="brightness_temperature",
         units="K",
     ),
-    "temperature": MetaData(
+    "air_temperature": MetaData(
         long_name="Temperature profile from radiosonde",
         standard_name="air_temperature",
         units="K",
     ),
-    "pressure": MetaData(
+    "air_pressure": MetaData(
         long_name="Pressure profile from radiosonde",
         standard_name="air_pressure",
         units="Pa",
     ),
-    "absolute_humidity": MetaData(
-        long_name="Absolute humidity profile from radiosonde",
-        units="kg m-3",
+    "relative_humidity": MetaData(
+        long_name="Relative humidity profile from radiosonde",
+        units="1",
     ),
     "lwp": MetaData(
         long_name="Column-integrated liquid water path derived from radiosonde",
