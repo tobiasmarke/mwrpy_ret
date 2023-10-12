@@ -101,7 +101,7 @@ def seconds2date(time_in_seconds: int, epoch: Epoch = (2001, 1, 1)) -> str:
         datetime.datetime(*epoch, tzinfo=timezone.utc)
     )
     timestamp = time_in_seconds + epoch_in_seconds
-    return datetime.datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d-%H")
+    return datetime.datetime.utcfromtimestamp(timestamp).strftime("%Y%m%d%H")
 
 
 def str_to_numeric(value: str) -> int | float:

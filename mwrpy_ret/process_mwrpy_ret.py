@@ -6,10 +6,10 @@ import netCDF4 as nc
 import numpy as np
 
 from mwrpy_ret import ret_mwr
-from mwrpy_ret.atmos import era5_geopot
 from mwrpy_ret.era5_download.get_era5 import era5_request
+from mwrpy_ret.rad_trans.prepare_input import prepare_mod, prepare_rs
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
-from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_mod, rad_trans_rs
+from mwrpy_ret.rad_trans.run_rad_trans import rad_trans
 from mwrpy_ret.utils import (
     GAUSS,
     _get_filename,
@@ -89,9 +89,10 @@ def process_input(
             file_names = get_file_list(data_in)
             for file in file_names:
                 output_hour = None
+                input_rs = prepare_rs(file)
                 try:
-                    output_hour = rad_trans_rs(
-                        file,
+                    output_hour = rad_trans(
+                        input_rs,
                         np.array(params["height"]) + params["altitude"],
                         np.array(params["frequency"]),
                         90.0 - np.array(params["elevation_angle"]),
@@ -121,32 +122,15 @@ def process_input(
             + "_"
             + stop_date.strftime("%Y%m%d")
         )
-
         if len(file_name) == 1:
             with nc.Dataset(file_name[0]) as mod_data:
                 for index, hour in enumerate(mod_data["time"]):
                     date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
-                    geopot, pres = era5_geopot(
-                        mod_data["level"][:],
-                        np.mean(np.exp(mod_data["lnsp"][index, 0, :, :]), axis=(0, 1)),
-                        np.mean(mod_data["z"][index, 0, :, :], axis=(0, 1)),
-                        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2)),
-                        np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)),
-                    )
                     output_hour = None
+                    input_mod = prepare_mod(mod_data, index, int(date_i))
                     try:
-                        output_hour = rad_trans_mod(
-                            np.flip(
-                                np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
-                            ),
-                            np.flip(
-                                np.mean(mod_data["q"][index, :, :, :], axis=(1, 2))
-                            ),
-                            geopot,
-                            pres,
-                            np.flip(
-                                np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2))
-                            ),
+                        output_hour = rad_trans(
+                            input_mod,
                             np.array(params["height"]) + params["altitude"],
                             np.array(params["frequency"]),
                             90.0 - np.array(params["elevation_angle"]),
