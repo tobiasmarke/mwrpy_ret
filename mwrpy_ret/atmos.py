@@ -256,9 +256,7 @@ def pseudoAdiabLapseRate(T, Ws):
 
 
 def interp_log_p(p, z, z_int):
-    p_interp = np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
-
-    return p_interp * HPA_TO_P
+    return np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
 
 
 def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
@@ -276,19 +274,18 @@ def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
 
     for lev in sorted(level, reverse=True):
         i_z = np.where(level == lev)[0]
-        temp[i_z] = (temp[i_z] * (1.0 + 0.609133 * hum[i_z])) * con.RS
-
         p_l = a_cf[lev - 1] + (b_cf[lev - 1] * ps)
         p_lp = a_cf[lev] + (b_cf[lev] * ps)
 
         if lev == 1:
             dlog_p = np.log(p_lp / 0.1)
-            alpha = np.log(2)
+            alpha = -np.log(2)
         else:
             dlog_p = np.log(p_lp / p_l)
             alpha = 1.0 - ((p_l / (p_lp - p_l)) * dlog_p)
 
-        z_f[i_z] = gpot + (temp[i_z] * alpha)
+        temp[i_z] = (temp[i_z] * (1.0 + 0.609133 * hum[i_z])) * con.RS
+        z_f[i_z] = gpot - (temp[i_z] * alpha)
         gpot = gpot + (temp[i_z] * dlog_p)
 
     return np.flip(z_f), np.flip(pres)

@@ -47,9 +47,8 @@ def get_data_attributes(ret_variables: dict, source: str) -> dict:
 
 ATTRIBUTES_COM = {
     "time": MetaData(
-        long_name="Date and time (UTC) of the measurement",
-        units="YYYYMMDDHH",
-        comment="Time indication at beginning of samples",
+        long_name="Time (UTC) of the measurement",
+        units="seconds since 1970-01-01 00:00:00.000",
     ),
     "height": MetaData(
         long_name="Height above mean sea level",
@@ -85,9 +84,9 @@ ATTRIBUTES_RS = {
         standard_name="air_pressure",
         units="Pa",
     ),
-    "relative_humidity": MetaData(
-        long_name="Relative humidity profile from radiosonde",
-        units="1",
+    "absolute_humidity": MetaData(
+        long_name="Absolute humidity profile from radiosonde",
+        units="kg m-3",
     ),
     "lwp": MetaData(
         long_name="Column-integrated liquid water path derived from radiosonde",
@@ -104,34 +103,33 @@ ATTRIBUTES_RS = {
 
 ATTRIBUTES_MOD = {
     "tb": MetaData(
-        long_name="Simulated brightness temperatures from model",
-        standard_name="tb",
+        long_name="Microwave brightness temperature simulated from model",
+        standard_name="brightness_temperature",
         units="K",
     ),
-    "T": MetaData(
-        long_name="Temperature profiles from model",
-        standard_name="T",
+    "air_temperature": MetaData(
+        long_name="Temperature profile from model",
+        standard_name="air_temperature",
         units="K",
     ),
-    "p": MetaData(
-        long_name="Pressure profiles from model",
-        standard_name="p",
+    "air_pressure": MetaData(
+        long_name="Pressure profile from model",
+        standard_name="air_pressure",
         units="Pa",
     ),
-    "q": MetaData(
-        long_name="Absolute humidity profiles from model",
-        standard_name="q",
-        units="kg/m^3",
+    "absolute_humidity": MetaData(
+        long_name="Absolute humidity profile from model",
+        units="kg m-3",
     ),
     "lwp": MetaData(
-        long_name="Liquid water path derived from model",
-        standard_name="lwp",
-        units="kg/m^2",
+        long_name="Column-integrated liquid water path derived from model",
+        standard_name="atmosphere_cloud_liquid_water_content",
+        units="kg m-2",
     ),
     "iwv": MetaData(
-        long_name="Integrated water vapor derived from model",
-        standard_name="iwv",
-        units="kg/m^2",
+        long_name="Column-integrated water vapour derived from model",
+        standard_name="atmosphere_mass_content_of_water_vapor",
+        units="kg m-2",
     ),
 }
 

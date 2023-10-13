@@ -15,8 +15,6 @@ def rad_trans(
     ind1: np.ndarray,
     ape_ang: np.ndarray,
 ) -> dict:
-    # height = height - height[0] + height_int[0]
-
     # Integrated water vapor [kg/m²]
     iwv = rh_to_iwv(
         input_dat["air_temperature"][:],

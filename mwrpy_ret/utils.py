@@ -104,6 +104,19 @@ def seconds2date(time_in_seconds: int, epoch: Epoch = (2001, 1, 1)) -> str:
     return datetime.datetime.utcfromtimestamp(timestamp).strftime("%Y%m%d%H")
 
 
+def seconds_since_epoch(date: str, epoch: Epoch = (1970, 1, 1)) -> int:
+    time_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(
+            *(int(date[0:4]), int(date[4:6]), int(date[6:8]), int(date[8:])),
+            tzinfo=timezone.utc,
+        )
+    )
+    epoch_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(*epoch, tzinfo=timezone.utc)
+    )
+    return int(time_in_seconds) + int(epoch_in_seconds)
+
+
 def str_to_numeric(value: str) -> int | float:
     """Converts string to number (int or float)."""
     try:

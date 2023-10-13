@@ -108,10 +108,12 @@ def process_input(
                     for key, array in output_hour.items():
                         output_day = append_data(output_day, key, array)
 
-            if output_day is not None:
-                logging.info(f"Radiative transfer using {source} for {site}, {date}")
-                for key in output_day:
-                    data_nc = append_data(data_nc, key, output_day[key])
+            if len(output_day) > 0:
+                logging.info(
+                    f"Radiative transfer using {source} data for {site}, {date}"
+                )
+                for key, array in output_day:
+                    data_nc = append_data(data_nc, key, array)
 
     else:
         file_name = get_file_list(
@@ -122,29 +124,33 @@ def process_input(
             + "_"
             + stop_date.strftime("%Y%m%d")
         )
-        if len(file_name) == 1:
-            with nc.Dataset(file_name[0]) as mod_data:
-                for index, hour in enumerate(mod_data["time"]):
-                    date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
-                    output_hour = None
-                    input_mod = prepare_mod(mod_data, index, int(date_i))
-                    try:
-                        output_hour = rad_trans(
-                            input_mod,
-                            np.array(params["height"]) + params["altitude"],
-                            np.array(params["frequency"]),
-                            90.0 - np.array(params["elevation_angle"]),
-                            bdw_fre,
-                            bdw_wgh,
-                            f_all,
-                            ind1,
-                            ape_ang,
+        with nc.Dataset(file_name[0]) as mod_data:
+            for index, hour in enumerate(mod_data["time"]):
+                date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
+                output_hour = None
+                input_mod = prepare_mod(mod_data, index, date_i)
+                try:
+                    output_hour = rad_trans(
+                        input_mod,
+                        np.array(params["height"]) + params["altitude"],
+                        np.array(params["frequency"]),
+                        90.0 - np.array(params["elevation_angle"]),
+                        bdw_fre,
+                        bdw_wgh,
+                        f_all,
+                        ind1,
+                        ape_ang,
+                    )
+                except ValueError:
+                    logging.info(f"Skipping time {date_i}")
+                if output_hour is not None:
+                    if date_i[-2:] == "00":
+                        logging.info(
+                            f"Radiative transfer using {source} data\n"
+                            "for {site}, {date_i[:-2]}"
                         )
-                    except ValueError:
-                        logging.info(f"Skipping time {date_i}")
-                    if output_hour is not None:
-                        for key, array in output_hour.items():
-                            data_nc = append_data(output_hour, key, array)
+                    for key, array in output_hour.items():
+                        data_nc = append_data(data_nc, key, array)
 
     return data_nc
 

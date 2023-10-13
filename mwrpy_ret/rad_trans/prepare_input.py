@@ -5,6 +5,7 @@ from metpy.units import units
 
 import mwrpy_ret.constants as con
 from mwrpy_ret.atmos import era5_geopot
+from mwrpy_ret.utils import seconds_since_epoch
 
 
 def prepare_rs(file: str) -> dict:
@@ -21,12 +22,14 @@ def prepare_rs(file: str) -> dict:
             rs_data.variables["relative_humidity"][:] / 100.0
         )
         input_rs["air_pressure"] = rs_data.variables["air_pressure"][:] * 100.0
-        input_rs["time"] = rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data
+        input_rs["time"] = seconds_since_epoch(
+            str(rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data)
+        )
 
     return input_rs
 
 
-def prepare_mod(mod_data: dict, index: int, date_i: int) -> dict:
+def prepare_mod(mod_data: dict, index: int, date_i: str) -> dict:
     input_mod: dict = {}
 
     geopotential, input_mod["air_pressure"] = era5_geopot(
@@ -41,6 +44,17 @@ def prepare_mod(mod_data: dict, index: int, date_i: int) -> dict:
     input_mod["air_temperature"] = np.flip(
         np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
     )
+    # input_mod["height"] = np.zeros(len(mod_data["level"][:]), np.float32)
+    for ih in range(len(mod_data["level"][:]) - 1):
+        input_mod["height"][ih + 1] = (
+            input_mod["height"][ih]
+            + metpy.calc.thickness_hydrostatic(
+                units.Quantity(input_mod["air_pressure"][ih : ih + 2], "Pa"),
+                units.Quantity(input_mod["air_temperature"][ih : ih + 2], "K"),
+            ).magnitude
+        )
+    input_mod["height"][0:-1] = input_mod["height"][0:-1] + np.diff(input_mod["height"])
+
     humidity = np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)))
     input_mod[
         "relative_humidity"
@@ -49,6 +63,6 @@ def prepare_mod(mod_data: dict, index: int, date_i: int) -> dict:
         units.Quantity(input_mod["air_temperature"], "K"),
         humidity,
     ).magnitude
-    input_mod["time"] = date_i
+    input_mod["time"] = seconds_since_epoch(date_i)
 
     return input_mod
