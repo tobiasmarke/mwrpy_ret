@@ -1,3 +1,15 @@
+## 0.4.0 – 2023-10-19
+
+- LWC model option & RT fix
+- Fix metadata and time
+- Fix variable assignment & naming
+- Simplify processing chain
+- Derive ERA5 input data
+- Load ERA5 height
+- Update ERA5 request and add to CLI
+- ERA5 request infrastructure added
+- Update README.md
+
 ## 0.3.1 – 2023-09-14
 
 - Fix height indexing
