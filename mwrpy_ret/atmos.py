@@ -1,5 +1,8 @@
 """Module for atmsopheric functions."""
+import os
+
 import numpy as np
+import pandas as pd
 
 import mwrpy_ret.constants as con
 
@@ -74,8 +77,6 @@ def moist_rho_rh(p, T, rh):
 
     Example:
     moist_rho_rh(p,T,rh,q_ice,q_snow,q_rain,q_cloud,q_graupel,q_hail)
-
-
     """
 
     eStar = calc_saturation_vapor_pressure(T)
@@ -106,19 +107,19 @@ def rh_to_iwv(T, rh, height):
 
 
 def detect_liq_cloud(z, t, rh, p_rs):
-    # ***********
+    """
     # INPUT
     # z: height grid
     # T: temperature on z
     # rh: relative humidty on z
     # rh_thres: relative humidity threshold for the detection on liquid clouds on z
-    # T_thres: don not detect liquid water clouds below this value (scalar)
+    # T_thres: do not detect liquid water clouds below this value (scalar)
     # ***********
     # OUTPUT
     # z_top: array of cloud tops
     # z_base: array of cloud bases
     # z_cloud: array of cloudy height levels
-    # ***********
+    """
 
     alpha = 0.59
     beta = 1.37
@@ -131,6 +132,28 @@ def detect_liq_cloud(z, t, rh, p_rs):
 
     i_cloud, i_top, i_base = (
         np.where((rh > rh_thres) & (t > t_thres))[0],
+        np.empty(0, np.int32),
+        np.empty(0, np.int32),
+    )
+    if len(i_cloud) > 1:
+        i_base = np.unique(
+            np.hstack((i_cloud[0], i_cloud[np.diff(np.hstack((0, i_cloud))) > 1]))
+        )
+        i_top = np.hstack(
+            (i_cloud[np.diff(np.hstack((i_cloud, 0))) > 1] - 1, i_cloud[-1])
+        )
+
+        if len(i_top) != len(i_base):
+            print("something wrong, number of bases NE number of cloud tops!")
+            return [], []
+
+    return z[i_top], z[i_base]
+
+
+def detect_cloud_mod(z, lwc):
+    """detect liquid cloud boundaries from model"""
+    i_cloud, i_top, i_base = (
+        np.where(lwc > 0.0)[0],
         np.empty(0, np.int32),
         np.empty(0, np.int32),
     )
@@ -255,6 +278,36 @@ def pseudoAdiabLapseRate(T, Ws):
 
 
 def interp_log_p(p, z, z_int):
-    p_interp = np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
+    return np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
 
-    return p_interp * HPA_TO_P
+
+def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
+    file_mh = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/era5_model_levels_137.csv"
+    )
+    mod_lvl = pd.read_csv(file_mh)
+    a_cf = mod_lvl["a [Pa]"].values[:].astype("float")
+    b_cf = mod_lvl["b"].values[:].astype("float")
+    z_f = np.empty(len(level), np.float32)
+
+    p_h = a_cf + b_cf * ps
+    pres = (p_h + np.roll(p_h, 1, axis=0))[1:] / 2
+
+    for lev in sorted(level, reverse=True):
+        i_z = np.where(level == lev)[0]
+        p_l = a_cf[lev - 1] + (b_cf[lev - 1] * ps)
+        p_lp = a_cf[lev] + (b_cf[lev] * ps)
+
+        if lev == 1:
+            dlog_p = np.log(p_lp / 0.1)
+            alpha = np.log(2)
+        else:
+            dlog_p = np.log(p_lp / p_l)
+            alpha = 1.0 - ((p_l / (p_lp - p_l)) * dlog_p)
+
+        temp[i_z] = (temp[i_z] * (1.0 + 0.609133 * hum[i_z])) * con.RS
+        z_f[i_z] = gpot + (temp[i_z] * alpha)
+        gpot = gpot + (temp[i_z] * dlog_p)
+
+    return np.flip(z_f), np.flip(pres)

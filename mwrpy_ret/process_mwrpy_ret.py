@@ -2,11 +2,14 @@ import datetime
 import logging
 import os
 
+import netCDF4 as nc
 import numpy as np
 
 from mwrpy_ret import ret_mwr
+from mwrpy_ret.era5_download.get_era5 import era5_request
+from mwrpy_ret.rad_trans.prepare_input import prepare_mod, prepare_rs
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
-from mwrpy_ret.rad_trans.run_rad_trans import rad_trans_rs
+from mwrpy_ret.rad_trans.run_rad_trans import rad_trans
 from mwrpy_ret.utils import (
     GAUSS,
     _get_filename,
@@ -17,6 +20,7 @@ from mwrpy_ret.utils import (
     isodate2date,
     loadCoeffsJSON,
     read_yaml_config,
+    seconds2date,
 )
 
 
@@ -26,33 +30,33 @@ def main(args):
     start_date = isodate2date(_start_date)
     stop_date = isodate2date(_stop_date)
     global_attributes, params = read_yaml_config(args.site)
-    data_nc: dict = {}
-    for date in date_range(start_date, stop_date):
-        output_day = process_input(args.command, date, params)
-        if output_day is not None:
-            logging.info(
-                f"Radiative transfer using {args.command} for {args.site}, {date}"
-            )
-            for key in output_day:
-                data_nc = append_data(data_nc, key, output_day[key])
+    if args.command == "era5":
+        era5_request(args.site, params, start_date, stop_date)
+    else:
+        data_nc = process_input(args.command, args.site, start_date, stop_date, params)
 
-    data_nc["height"] = np.array(params["height"]) + params["altitude"]
-    data_nc["frequency"] = np.array(params["frequency"])
-    data_nc["elevation_angle"] = np.array(params["elevation_angle"])
+        data_nc["height"] = np.array(params["height"]) + params["altitude"]
+        data_nc["frequency"] = np.array(params["frequency"])
+        data_nc["elevation_angle"] = np.array(params["elevation_angle"])
 
-    output_file = _get_filename(args.command, start_date, stop_date, args.site)
-    output_dir = os.path.dirname(output_file)
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    if ("time" in data_nc) & (output_file is not None):
-        ret_in = ret_mwr.Ret(data_nc)
-        ret_in.data = get_data_attributes(ret_in.data, args.command)
-        logging.info(f"Saving output file {output_file}")
-        ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
+        output_file = _get_filename(args.command, start_date, stop_date, args.site)
+        output_dir = os.path.dirname(output_file)
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        if ("time" in data_nc) & (output_file is not None):
+            ret_in = ret_mwr.Ret(data_nc)
+            ret_in.data = get_data_attributes(ret_in.data, args.command)
+            logging.info(f"Saving output file {output_file}")
+            ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
 
 
-def process_input(source: str, date: datetime.date, params: dict) -> dict:
-    output_day: dict = {}
+def process_input(
+    source: str,
+    site: str,
+    start_date: datetime.date,
+    stop_date: datetime.date,
+    params: dict,
+) -> dict:
     # Channel bandwidth
     path = (
         os.path.dirname(os.path.realpath(__file__))
@@ -77,29 +81,78 @@ def process_input(source: str, date: datetime.date, params: dict) -> dict:
     ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
     ape_ang = ape_ang[ape_ang >= 0.0]
 
+    data_nc: dict = {}
     if source == "radiosonde":
-        data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
-        file_names = get_file_list(data_in)
-        for file in file_names:
-            output_hour = None
-            try:
-                output_hour = rad_trans_rs(
-                    file,
-                    np.array(params["height"]) + params["altitude"],
-                    np.array(params["frequency"]),
-                    90.0 - np.array(params["elevation_angle"]),
-                    bdw_fre,
-                    bdw_wgh,
-                    f_all,
-                    ind1,
-                    ape_ang,
+        for date in date_range(start_date, stop_date):
+            output_day: dict = {}
+            data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
+            file_names = get_file_list(data_in)
+            for file in file_names:
+                output_hour = None
+                input_rs = prepare_rs(file, params["height"][-1])
+                try:
+                    output_hour = rad_trans(
+                        input_rs,
+                        np.array(params["height"]) + params["altitude"],
+                        np.array(params["frequency"]),
+                        90.0 - np.array(params["elevation_angle"]),
+                        bdw_fre,
+                        bdw_wgh,
+                        f_all,
+                        ind1,
+                        ape_ang,
+                    )
+                except ValueError:
+                    logging.info(f"Skipping file {file}")
+                if output_hour is not None:
+                    for key, array in output_hour.items():
+                        output_day = append_data(output_day, key, array)
+
+            if len(output_day) > 0:
+                logging.info(
+                    f"Radiative transfer using {source} data for {site}, {date}"
                 )
-            except ValueError:
-                logging.info(f"Skipping file {file}")
-            if output_hour is not None:
-                for key, array in output_hour.items():
-                    output_day = append_data(output_day, key, array)
-    return output_day
+                for key, array in output_day:
+                    data_nc = append_data(data_nc, key, array)
+
+    else:
+        file_name = get_file_list(
+            params["data_mod"]
+            + site
+            + "_era5_"
+            + start_date.strftime("%Y%m%d")
+            + "_"
+            + stop_date.strftime("%Y%m%d")
+        )
+        with nc.Dataset(file_name[0]) as mod_data:
+            for index, hour in enumerate(mod_data["time"]):
+                date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
+                output_hour = None
+                input_mod = prepare_mod(mod_data, index, date_i, params["height"][-1])
+                try:
+                    output_hour = rad_trans(
+                        input_mod,
+                        np.array(params["height"]) + params["altitude"],
+                        np.array(params["frequency"]),
+                        90.0 - np.array(params["elevation_angle"]),
+                        bdw_fre,
+                        bdw_wgh,
+                        f_all,
+                        ind1,
+                        ape_ang,
+                    )
+                except ValueError:
+                    logging.info(f"Skipping time {date_i}")
+                if output_hour is not None:
+                    if date_i[-2:] == "00":
+                        logging.info(
+                            f"Radiative transfer using {source} data "
+                            f"for {site}, {date_i[:-2]}"
+                        )
+                    for key, array in output_hour.items():
+                        data_nc = append_data(data_nc, key, array)
+
+    return data_nc
 
 
 class RetIn:

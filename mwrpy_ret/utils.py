@@ -4,12 +4,15 @@ import json
 import logging
 import os
 import warnings
+from datetime import timezone
 from typing import Any, Iterator, NamedTuple
 
 import numpy as np
 import yaml
 from numpy import ma
 from yaml.loader import SafeLoader
+
+Epoch = tuple[int, int, int]
 
 
 class MetaData(NamedTuple):
@@ -41,7 +44,9 @@ def get_file_list(path_to_files: str):
     """Returns file list for specified path."""
     f_list = sorted(glob.glob(path_to_files + "/*.nc"))
     if len(f_list) == 0:
-        logging.warning("Error: no files found in directory %s", path_to_files)
+        f_list = sorted(glob.glob(path_to_files + "*.nc"))
+        if len(f_list) == 0:
+            logging.warning("Error: no files found in directory %s", path_to_files)
     return f_list
 
 
@@ -79,6 +84,37 @@ def date_range(
     """Returns range between two dates (datetimes)."""
     for n in range(int((end_date - start_date).days)):
         yield start_date + datetime.timedelta(n)
+
+
+def seconds2date(time_in_seconds: int, epoch: Epoch = (2001, 1, 1)) -> str:
+    """Converts seconds since some epoch to datetime (UTC).
+
+    Args:
+        time_in_seconds: Seconds since some epoch.
+        epoch: Epoch, default is (2001, 1, 1) (UTC).
+
+    Returns:
+        [year, month, day, hours, minutes, seconds] formatted as '05' etc (UTC).
+
+    """
+    epoch_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(*epoch, tzinfo=timezone.utc)
+    )
+    timestamp = time_in_seconds + epoch_in_seconds
+    return datetime.datetime.utcfromtimestamp(timestamp).strftime("%Y%m%d%H")
+
+
+def seconds_since_epoch(date: str, epoch: Epoch = (1970, 1, 1)) -> int:
+    time_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(
+            *(int(date[0:4]), int(date[4:6]), int(date[6:8]), int(date[8:])),
+            tzinfo=timezone.utc,
+        )
+    )
+    epoch_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(*epoch, tzinfo=timezone.utc)
+    )
+    return int(time_in_seconds) + int(epoch_in_seconds)
 
 
 def str_to_numeric(value: str) -> int | float:
