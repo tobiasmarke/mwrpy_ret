@@ -89,7 +89,7 @@ def process_input(
             file_names = get_file_list(data_in)
             for file in file_names:
                 output_hour = None
-                input_rs = prepare_rs(file)
+                input_rs = prepare_rs(file, params["height"][-1])
                 try:
                     output_hour = rad_trans(
                         input_rs,
@@ -128,7 +128,7 @@ def process_input(
             for index, hour in enumerate(mod_data["time"]):
                 date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
                 output_hour = None
-                input_mod = prepare_mod(mod_data, index, date_i)
+                input_mod = prepare_mod(mod_data, index, date_i, params["height"][-1])
                 try:
                     output_hour = rad_trans(
                         input_mod,
@@ -146,8 +146,8 @@ def process_input(
                 if output_hour is not None:
                     if date_i[-2:] == "00":
                         logging.info(
-                            f"Radiative transfer using {source} data\n"
-                            "for {site}, {date_i[:-2]}"
+                            f"Radiative transfer using {source} data "
+                            f"for {site}, {date_i[:-2]}"
                         )
                     for key, array in output_hour.items():
                         data_nc = append_data(data_nc, key, array)

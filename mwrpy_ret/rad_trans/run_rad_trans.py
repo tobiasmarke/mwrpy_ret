@@ -1,6 +1,13 @@
 import numpy as np
 
-from mwrpy_ret.atmos import abs_hum, detect_liq_cloud, interp_log_p, mod_ad, rh_to_iwv
+from mwrpy_ret.atmos import (
+    abs_hum,
+    detect_cloud_mod,
+    detect_liq_cloud,
+    interp_log_p,
+    mod_ad,
+    rh_to_iwv,
+)
 from mwrpy_ret.rad_trans import STP_IM10
 
 
@@ -23,12 +30,15 @@ def rad_trans(
     )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
-    top, base = detect_liq_cloud(
-        input_dat["height"][:],
-        input_dat["air_temperature"][:],
-        input_dat["relative_humidity"][:],
-        input_dat["air_pressure"][:],
-    )
+    if "lwc" in input_dat:
+        top, base = detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
+    else:
+        top, base = detect_liq_cloud(
+            input_dat["height"][:],
+            input_dat["air_temperature"][:],
+            input_dat["relative_humidity"][:],
+            input_dat["air_pressure"][:],
+        )
 
     lwc, lwp, height_new, cloud_new = (
         np.empty(0, np.float64),
@@ -43,11 +53,17 @@ def rad_trans(
                 & (input_dat["height"][:] <= top[icl])
             )[0]
             if len(xcl) > 1:
-                lwcx, cloudx = mod_ad(
-                    input_dat["air_temperature"][:][xcl],
-                    input_dat["air_pressure"][xcl],
-                    input_dat["height"][xcl],
-                )
+                if "lwc" in input_dat:
+                    lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
+                    lwp = lwp + np.sum(
+                        lwcx * np.diff(input_dat["height"][xcl[0] : xcl[-1] + 2])
+                    )
+                else:
+                    lwcx, cloudx = mod_ad(
+                        input_dat["air_temperature"][xcl],
+                        input_dat["air_pressure"][xcl],
+                        input_dat["height"][xcl],
+                    )
                 cloud_new = np.hstack((cloud_new, cloudx))
                 lwc = np.hstack((lwc, lwcx))
                 lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
@@ -144,8 +160,8 @@ def rad_trans(
     output = {
         "time": np.asarray([input_dat["time"]]),
         "tb": tb,
-        "temperature": np.expand_dims(temperature_int, 0),
-        "pressure": np.expand_dims(pressure_int, 0),
+        "air_temperature": np.expand_dims(temperature_int, 0),
+        "air_pressure": np.expand_dims(pressure_int, 0),
         "absolute_humidity": np.expand_dims(abshum_int, 0),
         "lwp": np.asarray([lwp]),
         "iwv": np.asarray([iwv]),

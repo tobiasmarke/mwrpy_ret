@@ -150,6 +150,28 @@ def detect_liq_cloud(z, t, rh, p_rs):
     return z[i_top], z[i_base]
 
 
+def detect_cloud_mod(z, lwc):
+    """detect liquid cloud boundaries from model"""
+    i_cloud, i_top, i_base = (
+        np.where(lwc > 0.0)[0],
+        np.empty(0, np.int32),
+        np.empty(0, np.int32),
+    )
+    if len(i_cloud) > 1:
+        i_base = np.unique(
+            np.hstack((i_cloud[0], i_cloud[np.diff(np.hstack((0, i_cloud))) > 1]))
+        )
+        i_top = np.hstack(
+            (i_cloud[np.diff(np.hstack((i_cloud, 0))) > 1] - 1, i_cloud[-1])
+        )
+
+        if len(i_top) != len(i_base):
+            print("something wrong, number of bases NE number of cloud tops!")
+            return [], []
+
+    return z[i_top], z[i_base]
+
+
 def adiab(i, T, P, z):
     """
     Adiabatic liquid water content assuming pseudo-adiabatic lapse rate
@@ -279,13 +301,13 @@ def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
 
         if lev == 1:
             dlog_p = np.log(p_lp / 0.1)
-            alpha = -np.log(2)
+            alpha = np.log(2)
         else:
             dlog_p = np.log(p_lp / p_l)
             alpha = 1.0 - ((p_l / (p_lp - p_l)) * dlog_p)
 
         temp[i_z] = (temp[i_z] * (1.0 + 0.609133 * hum[i_z])) * con.RS
-        z_f[i_z] = gpot - (temp[i_z] * alpha)
+        z_f[i_z] = gpot + (temp[i_z] * alpha)
         gpot = gpot + (temp[i_z] * dlog_p)
 
     return np.flip(z_f), np.flip(pres)
