@@ -7,7 +7,11 @@ import numpy as np
 
 from mwrpy_ret import ret_mwr
 from mwrpy_ret.era5_download.get_era5 import era5_request
-from mwrpy_ret.rad_trans.prepare_input import prepare_mod, prepare_rs
+from mwrpy_ret.rad_trans.prepare_input import (
+    prepare_mod,
+    prepare_rs,
+    prepare_standard_atmosphere,
+)
 from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
 from mwrpy_ret.rad_trans.run_rad_trans import rad_trans
 from mwrpy_ret.utils import (
@@ -115,7 +119,7 @@ def process_input(
                 for key, array in output_day:
                     data_nc = append_data(data_nc, key, array)
 
-    else:
+    elif source == "model":
         file_name = get_file_list(
             params["data_mod"]
             + site
@@ -151,6 +155,22 @@ def process_input(
                         )
                     for key, array in output_hour.items():
                         data_nc = append_data(data_nc, key, array)
+
+    elif source == "standard_atmosphere":
+        data_in = os.path.join(params["data_sa"], "standard_atmospheres.nc")
+        with nc.Dataset(data_in) as sa_data:
+            input_sa = prepare_standard_atmosphere(sa_data, params["height"][-1])
+            data_nc = rad_trans(
+                input_sa,
+                np.array(params["height"]) + params["altitude"],
+                np.array(params["frequency"]),
+                90.0 - np.array(params["elevation_angle"]),
+                bdw_fre,
+                bdw_wgh,
+                f_all,
+                ind1,
+                ape_ang,
+            )
 
     return data_nc
 

@@ -7,6 +7,7 @@ params:
 
   # path to input data and path for processed files
   #  data_rs: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
+  data_sa: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
   data_rs: /data/radiosondes/DWD_highres/lindenberg/
   data_mod: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
   data_out: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
