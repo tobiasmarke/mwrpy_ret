@@ -40,13 +40,11 @@ def append_data(data_in: dict, key: str, array: np.ndarray) -> dict:
     return data
 
 
-def get_file_list(path_to_files: str):
+def get_file_list(path_to_files: str, key: str):
     """Returns file list for specified path."""
-    f_list = sorted(glob.glob(path_to_files + "/*.nc"))
+    f_list = sorted(glob.glob(path_to_files + "*" + key + "*.nc"))
     if len(f_list) == 0:
-        f_list = sorted(glob.glob(path_to_files + "*.nc"))
-        if len(f_list) == 0:
-            logging.warning("Error: no files found in directory %s", path_to_files)
+        logging.warning("Error: no files found in directory %s", path_to_files)
     return f_list
 
 
