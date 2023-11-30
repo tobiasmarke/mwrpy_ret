@@ -16,10 +16,7 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
-    bdw_fre: np.ndarray,
-    bdw_wgh: np.ndarray,
-    f_all: np.ndarray,
-    ind1: np.ndarray,
+    coeff_bdw: dict,
     ape_ang: np.ndarray,
     tau_k: np.ndarray | None = None,
     tau_v: np.ndarray | None = None,
@@ -43,7 +40,7 @@ def STP_IM10(
     if tau_k is None:
         tau_k = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
     if tau_v is None:
-        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
+        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, coeff_bdw["f_all"])
 
     # Calculate TB
     TB = np.empty(len(f), np.float32)
@@ -52,15 +49,15 @@ def STP_IM10(
     mu_org = MU_CALC(z_final, T_final, p_final, q_final, theta)
     for ff in range(7):
         TB_v = np.empty(0, np.float32)
-        fr_wgh = bdw_wgh[ff, bdw_fre[ff, :] >= 0.0] / np.sum(
-            bdw_wgh[ff, bdw_fre[ff, :] >= 0.0]
+        fr_wgh = coeff_bdw["bdw_wgh"][ff, coeff_bdw["bdw_fre"][ff, :] >= 0.0] / np.sum(
+            coeff_bdw["bdw_wgh"][ff, coeff_bdw["bdw_fre"][ff, :] >= 0.0]
         )
         TB_org = np.sum(
             TB_CALC(
                 T_final,
-                tau_v[:, ind1[ff] : ind1[ff + 1]],
+                tau_v[:, coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
                 mu_org,
-                f_all[ind1[ff] : ind1[ff + 1]],
+                coeff_bdw["f_all"][coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
             )
             * fr_wgh
         )
@@ -89,9 +86,11 @@ def STP_IM10(
                     np.sum(
                         TB_CALC(
                             T_final,
-                            tau_v[:, ind1[ff] : ind1[ff + 1]],
+                            tau_v[:, coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
                             mu,
-                            f_all[ind1[ff] : ind1[ff + 1]],
+                            coeff_bdw["f_all"][
+                                coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]
+                            ],
                         )
                         * fr_wgh
                     )
@@ -149,20 +148,16 @@ def TAU_CALC(
 
         # ****gas absorption
         # water vapor
-        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100.0, f)
-        AWV = AWV / 1000.0
+        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100.0, f) / 1000.0
 
         # oxygen
-        AO2 = ABO2_R22(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f)
-        AO2 = AO2 / 1000.0
+        AO2 = ABO2_R22(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f) / 1000.0
 
         # nitrogen
-        AN2 = ABN2_R22(T_mean, p_mean / 100.0, f)
-        AN2 = AN2 / 1000.0
+        AN2 = ABN2_R22(T_mean, p_mean / 100.0, f) / 1000.0
 
         # liquid water
-        ABLIQ = ABLIQ_R22(LWC[kmax - 2 - ii], f, T_mean)
-        ABLIQ = ABLIQ / 1000.0
+        ABLIQ = ABLIQ_R22(LWC[kmax - 2 - ii], f, T_mean) / 1000.0
 
         absg = AWV + AO2 + AN2 + ABLIQ
         abs_all[kmax - 2 - ii, :] = absg
@@ -242,10 +237,9 @@ def ABWV_R22(
                     CF["W0S"][I] / 1000.0
                 ) * PVAP * TI ** CF["XS"][I]
                 if CF["W2"][I] > 0:
-                    WIDTH2 = (
-                        CF["W2"][I] * PDA * TI ** CF["XW2"][I]
-                        + (CF["W2S"][I] / 1000.0) * PVAP * TI ** CF["XW2S"][I]
-                    )
+                    WIDTH2 = (CF["W2"][I] / 1000.0) * PDA * TI ** CF["XW2"][I] + (
+                        CF["W2S"][I] / 1000.0
+                    ) * PVAP * TI ** CF["XW2S"][I]
                 else:
                     WIDTH2 = 0  # SUM = 0
 
@@ -257,7 +251,7 @@ def ABWV_R22(
                     * TI ** CF["XH"][I]
                 )
                 SHIFTS = (
-                    CF["SHS"][I]
+                    (CF["SHS"][I] / 1000.0)
                     * PVAP
                     * (1.0 - CF["ASELF"][I] * TILN)
                     * TI ** CF["XHS"][I]
@@ -278,7 +272,7 @@ def ABWV_R22(
                     if (J == 1) & (WIDTH2 > 0.0):
                         INDEX1 = np.abs(DF[J, :]) < 10.0 * WIDTH0
                         INDEX2 = (np.abs(DF[J, :]) < 750) & ~INDEX1
-                        XC = ((WIDTH0 - 1.5 * WIDTH2) + (DF[J] + 1.5 * DELTA2) * 1j) / (
+                        XC = (WIDTH0 - 1.5 * WIDTH2 + (DF[J] + 1.5 * DELTA2) * 1j) / (
                             WIDTH2 - DELTA2 * 1j
                         )
                         XRT = np.sqrt(XC)
@@ -349,20 +343,20 @@ def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
     PRESDA = PRES - PRESWV
     DEN = 0.001 * (PRESDA * B + 1.2 * PRESWV * TH)
     DFNR = WB300 * DEN
-    PE2 = DEN * DEN
+    PE2 = DEN**2
 
-    SUM = 1.584e-17 * FREQ * FREQ * DFNR / (TH * (FREQ * FREQ + DFNR * DFNR))
+    SUM = 1.584e-17 * FREQ**2 * DFNR / (TH * (FREQ**2 + DFNR**2))
 
     for K in range(len(CF["F"])):
         Y = DEN * (CF["Y0"][K] + CF["Y1"][K] * TH1)
-        DNU = PE2 * (CF["DNU0"][K] + CF["DNU1"][K])
+        DNU = PE2 * (CF["DNU0"][K] + CF["DNU1"][K] * TH1)
         GFAC = 1.0 + PE2 * (CF["G0"][K] + CF["G1"][K] * TH1)
         DF = CF["W300"][K] * DEN
         STR = CF["S300"][K] * np.exp(-CF["BE"][K] * TH1)
         DEL1 = FREQ - CF["F"][K] - DNU
         DEL2 = FREQ + CF["F"][K] + DNU
-        D1 = DEL1 * DEL1 + DF * DF
-        D2 = DEL2 * DEL2 + DF * DF
+        D1 = DEL1**2 + DF**2
+        D2 = DEL2**2 + DF**2
         SF1 = (DF * GFAC + DEL1 * Y) / D1
         SF2 = (DF * GFAC - DEL2 * Y) / D2
 
@@ -384,7 +378,7 @@ def ABN2_R22(T, P, F):
     """
     TH = 300.0 / T
     FDEPEN = 0.5 + 0.5 / (1.0 + (F / 450.0) ** 2.0)
-    ALPHA = 9.95e-14 * FDEPEN * P * P * F * F * TH**3.22
+    ALPHA = 9.95e-14 * FDEPEN * P**2 * F**2 * TH**3.22
 
     return ALPHA
 

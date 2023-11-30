@@ -4,12 +4,15 @@ import json
 import logging
 import os
 import warnings
+from datetime import timezone
 from typing import Any, Iterator, NamedTuple
 
 import numpy as np
 import yaml
 from numpy import ma
 from yaml.loader import SafeLoader
+
+Epoch = tuple[int, int, int]
 
 
 class MetaData(NamedTuple):
@@ -41,7 +44,9 @@ def get_file_list(path_to_files: str):
     """Returns file list for specified path."""
     f_list = sorted(glob.glob(path_to_files + "/*.nc"))
     if len(f_list) == 0:
-        logging.warning("Error: no files found in directory %s", path_to_files)
+        f_list = sorted(glob.glob(path_to_files + "*.nc"))
+        if len(f_list) == 0:
+            logging.warning("Error: no files found in directory %s", path_to_files)
     return f_list
 
 
@@ -79,6 +84,37 @@ def date_range(
     """Returns range between two dates (datetimes)."""
     for n in range(int((end_date - start_date).days)):
         yield start_date + datetime.timedelta(n)
+
+
+def seconds2date(time_in_seconds: int, epoch: Epoch = (2001, 1, 1)) -> str:
+    """Converts seconds since some epoch to datetime (UTC).
+
+    Args:
+        time_in_seconds: Seconds since some epoch.
+        epoch: Epoch, default is (2001, 1, 1) (UTC).
+
+    Returns:
+        [year, month, day, hours, minutes, seconds] formatted as '05' etc (UTC).
+
+    """
+    epoch_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(*epoch, tzinfo=timezone.utc)
+    )
+    timestamp = time_in_seconds + epoch_in_seconds
+    return datetime.datetime.utcfromtimestamp(timestamp).strftime("%Y%m%d%H")
+
+
+def seconds_since_epoch(date: str, epoch: Epoch = (1970, 1, 1)) -> int:
+    time_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(
+            *(int(date[0:4]), int(date[4:6]), int(date[6:8]), int(date[8:])),
+            tzinfo=timezone.utc,
+        )
+    )
+    epoch_in_seconds = datetime.datetime.timestamp(
+        datetime.datetime(*epoch, tzinfo=timezone.utc)
+    )
+    return int(time_in_seconds) + int(epoch_in_seconds)
 
 
 def str_to_numeric(value: str) -> int | float:
@@ -131,6 +167,49 @@ def read_yaml_config(site: str) -> tuple[dict, dict]:
         site_config["params"][name] = inst_config["params"][name]
 
     return site_config["global_specs"], site_config["params"]
+
+
+def read_bandwidth_coefficients() -> dict:
+    coeff_bdw: dict = {}
+
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_freqs.json"
+    )
+    FFI = loadCoeffsJSON(path)
+    coeff_bdw["bdw_fre"] = FFI["FFI"].T
+
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_norm_resp.json"
+    )
+    FRIN = loadCoeffsJSON(path)
+    coeff_bdw["bdw_wgh"] = FRIN["FRIN"].T
+
+    coeff_bdw["f_all"], coeff_bdw["ind1"] = np.empty(0, np.float32), np.zeros(
+        1, np.int32
+    )
+    for ff in range(7):
+        ifr = np.where(coeff_bdw["bdw_fre"][ff, :] >= 0.0)[0]
+        coeff_bdw["f_all"] = np.hstack(
+            (coeff_bdw["f_all"], coeff_bdw["bdw_fre"][ff, ifr])
+        )
+        coeff_bdw["ind1"] = np.hstack(
+            (
+                coeff_bdw["ind1"],
+                coeff_bdw["ind1"][len(coeff_bdw["ind1"]) - 1] + len(ifr),
+            )
+        )
+
+    return coeff_bdw
+
+
+def read_beamwidth_coefficients() -> np.ndarray:
+    ape_ini = np.linspace(-9.9, 9.9, 199)
+    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
+    ape_ang = ape_ang[ape_ang >= 0.0]
+
+    return ape_ang
 
 
 def date_string_to_date(date_string: str) -> datetime.date:
