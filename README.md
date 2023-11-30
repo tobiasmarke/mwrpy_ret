@@ -17,10 +17,9 @@ pip3 install .
 
 MWRpy_ret requires Python 3.10 or newer.
 
-
 ## Configuration
 
-The folder `mwrpy_ret/site_config/` contains site-specific configuration files, 
+The folder `mwrpy_ret/site_config/` contains site-specific configuration files,
 defining the input and output data paths etc., and the file `config.yaml`, which
 defines the elevation angles, frequencies and height grid.
 
@@ -33,15 +32,19 @@ MWRpy_ret can be run using the command line tool `mwrpy_ret/cli.py`:
 
 Arguments:
 
-| Short | Long         | Default           | Description                                                                          |
-| :---- | :----------- | :---------------- | :----------------------------------------------------------------------------------- |
-| `-s`  | `--site`     |                   | Site to process data from, e.g, `lindenberg`. Required.                              |
-| `-d`  | `--date`     |                   | Single date to be processed. Alternatively, `--start` and `--stop` can be defined.   |
-|       | `--start`    | `current day - 1` | Starting date.                                                                       |
-|       | `--stop`     | `current day `    | Stopping date.                                                                       |
+| Short | Long      | Default           | Description                                                                        |
+| :---- | :-------- | :---------------- | :--------------------------------------------------------------------------------- |
+| `-s`  | `--site`  |                   | Site to process data from, e.g, `lindenberg`. Required.                            |
+| `-d`  | `--date`  |                   | Single date to be processed. Alternatively, `--start` and `--stop` can be defined. |
+|       | `--start` | `current day - 1` | Starting date.                                                                     |
+|       | `--stop`  | `current day `    | Stopping date.                                                                     |
 
 Commands:
 
-| Command      | Description              |
-| :--------    | :----------------------- |
-| `radiosonde` | Process radiosonde data. |
+| Command               | Description                       |
+| :-------------------- | :-------------------------------- |
+| `ifs`                 | Process IFS data (default).       |
+| `radiosonde`          | Process radiosonde data.          |
+| `era5`                | Process ERA5 data.                |
+| `get_era5`            | Download ERA5 data.               |
+| `standard_atmosphere` | Process standard atmosphere data. |

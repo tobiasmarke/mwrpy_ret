@@ -169,6 +169,49 @@ def read_yaml_config(site: str) -> tuple[dict, dict]:
     return site_config["global_specs"], site_config["params"]
 
 
+def read_bandwidth_coefficients() -> dict:
+    coeff_bdw: dict = {}
+
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_freqs.json"
+    )
+    FFI = loadCoeffsJSON(path)
+    coeff_bdw["bdw_fre"] = FFI["FFI"].T
+
+    path = (
+        os.path.dirname(os.path.realpath(__file__))
+        + "/rad_trans/coeff/o2_bandpass_interp_norm_resp.json"
+    )
+    FRIN = loadCoeffsJSON(path)
+    coeff_bdw["bdw_wgh"] = FRIN["FRIN"].T
+
+    coeff_bdw["f_all"], coeff_bdw["ind1"] = np.empty(0, np.float32), np.zeros(
+        1, np.int32
+    )
+    for ff in range(7):
+        ifr = np.where(coeff_bdw["bdw_fre"][ff, :] >= 0.0)[0]
+        coeff_bdw["f_all"] = np.hstack(
+            (coeff_bdw["f_all"], coeff_bdw["bdw_fre"][ff, ifr])
+        )
+        coeff_bdw["ind1"] = np.hstack(
+            (
+                coeff_bdw["ind1"],
+                coeff_bdw["ind1"][len(coeff_bdw["ind1"]) - 1] + len(ifr),
+            )
+        )
+
+    return coeff_bdw
+
+
+def read_beamwidth_coefficients() -> np.ndarray:
+    ape_ini = np.linspace(-9.9, 9.9, 199)
+    ape_ang = ape_ini[GAUSS(ape_ini, 0.0) > 1e-3]
+    ape_ang = ape_ang[ape_ang >= 0.0]
+
+    return ape_ang
+
+
 def date_string_to_date(date_string: str) -> datetime.date:
     """Convert YYYY-MM-DD to Python date."""
     date_arr = [int(x) for x in date_string.split("-")]
