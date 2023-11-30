@@ -16,10 +16,7 @@ def STP_IM10(
     LWC,
     theta,  # zenith angle of observation in deg.
     f,  # frequency vector in GHz
-    bdw_fre: np.ndarray,
-    bdw_wgh: np.ndarray,
-    f_all: np.ndarray,
-    ind1: np.ndarray,
+    coeff_bdw: dict,
     ape_ang: np.ndarray,
     tau_k: np.ndarray | None = None,
     tau_v: np.ndarray | None = None,
@@ -43,7 +40,7 @@ def STP_IM10(
     if tau_k is None:
         tau_k = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f[0:7])
     if tau_v is None:
-        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, f_all)
+        tau_v = TAU_CALC(z_final, T_final, p_final, q_final, LWC, coeff_bdw["f_all"])
 
     # Calculate TB
     TB = np.empty(len(f), np.float32)
@@ -52,15 +49,15 @@ def STP_IM10(
     mu_org = MU_CALC(z_final, T_final, p_final, q_final, theta)
     for ff in range(7):
         TB_v = np.empty(0, np.float32)
-        fr_wgh = bdw_wgh[ff, bdw_fre[ff, :] >= 0.0] / np.sum(
-            bdw_wgh[ff, bdw_fre[ff, :] >= 0.0]
+        fr_wgh = coeff_bdw["bdw_wgh"][ff, coeff_bdw["bdw_fre"][ff, :] >= 0.0] / np.sum(
+            coeff_bdw["bdw_wgh"][ff, coeff_bdw["bdw_fre"][ff, :] >= 0.0]
         )
         TB_org = np.sum(
             TB_CALC(
                 T_final,
-                tau_v[:, ind1[ff] : ind1[ff + 1]],
+                tau_v[:, coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
                 mu_org,
-                f_all[ind1[ff] : ind1[ff + 1]],
+                coeff_bdw["f_all"][coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
             )
             * fr_wgh
         )
@@ -89,9 +86,11 @@ def STP_IM10(
                     np.sum(
                         TB_CALC(
                             T_final,
-                            tau_v[:, ind1[ff] : ind1[ff + 1]],
+                            tau_v[:, coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]],
                             mu,
-                            f_all[ind1[ff] : ind1[ff + 1]],
+                            coeff_bdw["f_all"][
+                                coeff_bdw["ind1"][ff] : coeff_bdw["ind1"][ff + 1]
+                            ],
                         )
                         * fr_wgh
                     )

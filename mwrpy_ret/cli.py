@@ -20,8 +20,8 @@ def _parse_args(args):
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["radiosonde", "model", "era5", "standard_atmosphere"],
-        default="model",
+        choices=["ifs", "radiosonde", "era5", "get_era5", "standard_atmosphere"],
+        default="ifs",
         help="Command to execute.",
     )
     group = parser.add_argument_group(title="General options")

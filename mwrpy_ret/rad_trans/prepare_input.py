@@ -24,7 +24,7 @@ def prepare_standard_atmosphere(sa_data: nc.Dataset, height_lim: np.float32) -> 
     return input_sa
 
 
-def prepare_rs(file: str, height_lim: np.float32) -> dict:
+def prepare_radiosonde(file: str, height_lim: np.float32) -> dict:
     input_rs: dict = {}
     with nc.Dataset(file) as rs_data:
         geopotential = units.Quantity(
@@ -33,8 +33,8 @@ def prepare_rs(file: str, height_lim: np.float32) -> dict:
         input_rs["height"] = metpy.calc.geopotential_to_height(
             geopotential[:]
         ).magnitude
-        height_ind = np.where(input_rs["height"] <= height_lim)
-        input_rs["height"] = input_rs["height"][height_ind]
+        height_ind = np.where(input_rs["height"] >= height_lim)[0][0]
+        input_rs["height"] = input_rs["height"][0 : height_ind + 1]
         input_rs["air_temperature"] = (
             rs_data.variables["air_temperature"][height_ind] + con.T0
         )
@@ -49,7 +49,7 @@ def prepare_rs(file: str, height_lim: np.float32) -> dict:
     return input_rs
 
 
-def prepare_mod(
+def prepare_era5(
     mod_data: dict, index: int, date_i: str, height_lim: np.float32
 ) -> dict:
     input_mod: dict = {}
@@ -63,19 +63,18 @@ def prepare_mod(
     )
     geopotential = units.Quantity(geopotential, "m^2/s^2")
     input_mod["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
-    height_ind = np.where(input_mod["height"] <= height_lim)
-    input_mod["height"] = input_mod["height"][height_ind]
+    height_ind = np.where(input_mod["height"] >= height_lim)[0][0]
+    input_mod["height"] = input_mod["height"][0 : height_ind + 1]
     input_mod["air_pressure"] = input_mod["air_pressure"][height_ind]
     input_mod["air_temperature"] = np.flip(
         np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
     )[height_ind]
-    humidity = np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)))[height_ind]
     input_mod[
         "relative_humidity"
     ] = metpy.calc.relative_humidity_from_specific_humidity(
         input_mod["air_pressure"] * units.Pa,
         units.Quantity(input_mod["air_temperature"], "K"),
-        humidity,
+        np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)))[height_ind],
     ).magnitude[
         height_ind
     ]

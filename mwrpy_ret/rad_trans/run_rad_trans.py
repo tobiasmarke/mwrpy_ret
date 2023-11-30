@@ -16,10 +16,7 @@ def rad_trans(
     height_int: np.ndarray,
     freq: np.ndarray,
     theta: np.ndarray,
-    bdw_fre: np.ndarray,
-    bdw_wgh: np.ndarray,
-    f_all: np.ndarray,
-    ind1: np.ndarray,
+    coeff_bdw: dict,
     ape_ang: np.ndarray,
 ) -> dict:
     # Integrated water vapor [kg/m²]
@@ -120,10 +117,7 @@ def rad_trans(
         lwc_new,
         theta[0],
         freq,
-        bdw_fre,
-        bdw_wgh,
-        f_all,
-        ind1,
+        coeff_bdw,
         ape_ang,
     )
     if len(theta) > 1:
@@ -136,10 +130,7 @@ def rad_trans(
                 lwc_new,
                 theta[i_ang + 1],
                 freq,
-                bdw_fre,
-                bdw_wgh,
-                f_all,
-                ind1,
+                coeff_bdw,
                 ape_ang,
                 tau_k,
                 tau_v,
