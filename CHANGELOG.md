@@ -1,3 +1,9 @@
+## 0.4.1 – 2023-11-30
+
+- Update version
+- Refactor code
+- Standard atmospheres as input
+
 ## 0.4.0 – 2023-10-19
 
 - LWC model option & RT fix
