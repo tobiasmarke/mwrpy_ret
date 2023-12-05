@@ -65,9 +65,12 @@ def _get_filename(
     source: str, start: datetime.date, stop: datetime.date, site: str
 ) -> str:
     _, params = read_yaml_config(site)
-    filename = (
-        f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
-    )
+    if source == "standard_atmosphere":
+        filename = f"{site}_{source}.nc"
+    else:
+        filename = (
+            f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
+        )
 
     return os.path.join(params["data_out"], filename)
 

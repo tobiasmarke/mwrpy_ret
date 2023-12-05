@@ -36,7 +36,8 @@ def _parse_args(args):
         "--start",
         type=str,
         metavar="YYYY-MM-DD",
-        help="Starting date. Default is current day (included).",
+        help="Starting date. Default is current day - 2 (included).",
+        default=utils.get_date_from_past(0),
     )
     group.add_argument(
         "--stop",

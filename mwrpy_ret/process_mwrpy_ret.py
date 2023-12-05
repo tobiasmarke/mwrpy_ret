@@ -60,7 +60,9 @@ def process_input(
     data_nc: dict = {}
     if source == "ifs":
         for date in date_range(start_date, stop_date):
-            data_in = os.path.join(params["data_ifs"], date.strftime("%Y/%m/%d/"))
+            data_in = os.path.join(
+                params["data_ifs"], date.strftime("%Y/"), date.strftime("%Y%m%d")
+            )
             file_name = get_file_list(data_in, "ecmwf")
             with nc.Dataset(file_name[0]) as ifs_data:
                 for index, hour in enumerate(ifs_data["time"][:-1]):
@@ -110,7 +112,7 @@ def process_input(
         file_name = (
             params["data_era5"]
             + site
-            + "_era5_"
+            + "_era5_input_"
             + start_date.strftime("%Y%m%d")
             + "_"
             + stop_date.strftime("%Y%m%d")
@@ -137,7 +139,7 @@ def process_input(
                         data_nc = append_data(data_nc, key, array)
 
     elif source == "standard_atmosphere":
-        data_in = os.path.join(params["data_sa"], "standard_atmospheres.nc")
+        data_in = os.path.join(params["data_std"], "standard_atmospheres.nc")
         with nc.Dataset(data_in) as sa_data:
             input_sa = prepare_standard_atmosphere(sa_data, params["height"][-1])
             data_nc = call_rad_trans(input_sa, params)

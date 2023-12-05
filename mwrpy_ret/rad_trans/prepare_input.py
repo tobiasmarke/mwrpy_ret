@@ -12,7 +12,7 @@ def prepare_ifs(
     ifs_data: nc.Dataset, index: int, date_i: str, height_lim: np.float32
 ) -> dict:
     input_ifs: dict = {"height": ifs_data["height"][index, :]}
-    height_ind = np.where(input_ifs["height"] <= height_lim)[0]
+    height_ind = range(np.where(input_ifs["height"] >= height_lim)[0][0] + 1)
     input_ifs["height"] = input_ifs["height"][height_ind]
     input_ifs["air_temperature"] = ifs_data["temperature"][index, height_ind]
     input_ifs["air_pressure"] = ifs_data["pressure"][index, height_ind]
@@ -24,7 +24,7 @@ def prepare_ifs(
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset, height_lim: np.float32) -> dict:
     input_sa: dict = {"height": sa_data.variables["height"][:] * 1000.0}
-    height_ind = np.where(input_sa["height"] <= height_lim)[0]
+    height_ind = range(np.where(input_sa["height"] >= height_lim)[0][0] + 1)
     input_sa["height"] = input_sa["height"][height_ind]
     input_sa["air_temperature"] = sa_data.variables["t_atmo"][height_ind, 0]
     input_sa["air_pressure"] = sa_data.variables["p_atmo"][height_ind, 0] * 100.0
@@ -47,8 +47,8 @@ def prepare_radiosonde(file: str, height_lim: np.float32) -> dict:
         input_rs["height"] = metpy.calc.geopotential_to_height(
             geopotential[:]
         ).magnitude
-        height_ind = np.where(input_rs["height"] >= height_lim)[0][0]
-        input_rs["height"] = input_rs["height"][0 : height_ind + 1]
+        height_ind = range(np.where(input_rs["height"] >= height_lim)[0][0] + 1)
+        input_rs["height"] = input_rs["height"][height_ind]
         input_rs["air_temperature"] = (
             rs_data.variables["air_temperature"][height_ind] + con.T0
         )
@@ -77,8 +77,8 @@ def prepare_era5(
     )
     geopotential = units.Quantity(geopotential, "m^2/s^2")
     input_era5["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
-    height_ind = np.where(input_era5["height"] >= height_lim)[0][0]
-    input_era5["height"] = input_era5["height"][0 : height_ind + 1]
+    height_ind = range(np.where(input_era5["height"] >= height_lim)[0][0] + 1)
+    input_era5["height"] = input_era5["height"][height_ind]
     input_era5["air_pressure"] = input_era5["air_pressure"][height_ind]
     input_era5["air_temperature"] = np.flip(
         np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
