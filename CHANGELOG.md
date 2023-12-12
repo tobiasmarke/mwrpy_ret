@@ -1,3 +1,8 @@
+## 0.5.0 – 2023-12-12
+
+- Naming fixes
+- Add IFS as input
+
 ## 0.4.1 – 2023-11-30
 
 - Update version
