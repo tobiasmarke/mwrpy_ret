@@ -9,6 +9,7 @@ from mwrpy_ret import ret_mwr
 from mwrpy_ret.era5_download.get_era5 import era5_request
 from mwrpy_ret.rad_trans.prepare_input import (
     prepare_era5,
+    prepare_ifs,
     prepare_radiosonde,
     prepare_standard_atmosphere,
 )
@@ -56,35 +57,50 @@ def process_input(
     stop_date: datetime.date,
     params: dict,
 ) -> dict:
-    # Channel bandwidth
-    coeff_bdw = read_bandwidth_coefficients()
-    # Antenna beamwidth
-    ape_ang = read_beamwidth_coefficients()
-
     data_nc: dict = {}
-    if source == "radiosonde":
+    if source == "ifs":
+        for date in date_range(start_date, stop_date):
+            data_in = os.path.join(
+                params["data_ifs"], date.strftime("%Y/"), date.strftime("%Y%m%d")
+            )
+            file_name = get_file_list(data_in, "ecmwf")
+            with nc.Dataset(file_name[0]) as ifs_data:
+                for index, hour in enumerate(ifs_data["time"][:-1]):
+                    output_hour = None
+                    date_i = datetime.datetime.combine(
+                        date, datetime.time(int(hour))
+                    ).strftime("%Y%m%d%H")
+                    input_ifs = prepare_ifs(
+                        ifs_data, index, date_i, params["height"][-1]
+                    )
+                    try:
+                        output_hour = call_rad_trans(input_ifs, params)
+                    except ValueError:
+                        logging.info(f"Skipping time {date_i}")
+                    if output_hour is not None:
+                        if date_i[-2:] == "00":
+                            logging.info(
+                                f"Radiative transfer using {source} data "
+                                f"for {site}, {date_i[:-2]}"
+                            )
+                        for key, array in output_hour.items():
+                            data_nc = append_data(data_nc, key, array)
+
+    elif source == "radiosonde":
         for date in date_range(start_date, stop_date):
             output_day: dict = {}
-            data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d"))
-            file_names = get_file_list(data_in)
+            data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d/"))
+            file_names = get_file_list(data_in, "radiosonde")
             for file in file_names:
                 output_hour = None
                 input_rs = prepare_radiosonde(file, params["height"][-1])
                 try:
-                    output_hour = rad_trans(
-                        input_rs,
-                        np.array(params["height"]) + params["altitude"],
-                        np.array(params["frequency"]),
-                        90.0 - np.array(params["elevation_angle"]),
-                        coeff_bdw,
-                        ape_ang,
-                    )
+                    output_hour = call_rad_trans(input_rs, params)
                 except ValueError:
                     logging.info(f"Skipping file {file}")
                 if output_hour is not None:
                     for key, array in output_hour.items():
                         output_day = append_data(output_day, key, array)
-
             if len(output_day) > 0:
                 logging.info(
                     f"Radiative transfer using {source} data for {site}, {date}"
@@ -93,28 +109,24 @@ def process_input(
                     data_nc = append_data(data_nc, key, array)
 
     elif source == "era5":
-        file_name = get_file_list(
-            params["data_mod"]
+        file_name = (
+            params["data_era5"]
             + site
-            + "_era5_"
+            + "_era5_input_"
             + start_date.strftime("%Y%m%d")
             + "_"
             + stop_date.strftime("%Y%m%d")
+            + ".nc"
         )
-        with nc.Dataset(file_name[0]) as mod_data:
-            for index, hour in enumerate(mod_data["time"]):
+        with nc.Dataset(file_name) as era5_data:
+            for index, hour in enumerate(era5_data["time"]):
                 date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
                 output_hour = None
-                input_mod = prepare_era5(mod_data, index, date_i, params["height"][-1])
+                input_era5 = prepare_era5(
+                    era5_data, index, date_i, params["height"][-1]
+                )
                 try:
-                    output_hour = rad_trans(
-                        input_mod,
-                        np.array(params["height"]) + params["altitude"],
-                        np.array(params["frequency"]),
-                        90.0 - np.array(params["elevation_angle"]),
-                        coeff_bdw,
-                        ape_ang,
-                    )
+                    output_hour = call_rad_trans(input_era5, params)
                 except ValueError:
                     logging.info(f"Skipping time {date_i}")
                 if output_hour is not None:
@@ -127,21 +139,31 @@ def process_input(
                         data_nc = append_data(data_nc, key, array)
 
     elif source == "standard_atmosphere":
-        data_in = os.path.join(params["data_sa"], "standard_atmospheres.nc")
+        data_in = os.path.join(params["data_std"], "standard_atmospheres.nc")
         with nc.Dataset(data_in) as sa_data:
             input_sa = prepare_standard_atmosphere(sa_data, params["height"][-1])
-            data_nc = rad_trans(
-                input_sa,
-                np.array(params["height"]) + params["altitude"],
-                np.array(params["frequency"]),
-                90.0 - np.array(params["elevation_angle"]),
-                coeff_bdw,
-                ape_ang,
-            )
+            data_nc = call_rad_trans(input_sa, params)
 
     data_nc["height"] = np.array(params["height"]) + params["altitude"]
     data_nc["frequency"] = np.array(params["frequency"])
     data_nc["elevation_angle"] = np.array(params["elevation_angle"])
+    return data_nc
+
+
+def call_rad_trans(data_in: dict, params: dict) -> dict:
+    # Channel bandwidth
+    coeff_bdw = read_bandwidth_coefficients()
+    # Antenna beamwidth
+    ape_ang = read_beamwidth_coefficients()
+
+    data_nc = rad_trans(
+        data_in,
+        np.array(params["height"]) + params["altitude"],
+        np.array(params["frequency"]),
+        90.0 - np.array(params["elevation_angle"]),
+        coeff_bdw,
+        ape_ang,
+    )
     return data_nc
 
 
