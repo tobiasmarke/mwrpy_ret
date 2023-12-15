@@ -16,7 +16,7 @@ def era5_request(
         start_date: first day of request
         stop_date: last day of request
     """
-    output_file = _get_filename("era5", start_date, stop_date, site)
+    output_file = _get_filename("era5_input", start_date, stop_date, site)
 
     lat_box = get_corner_coord(
         params["latitude"], params["lat_offset"], params["lat_res"]

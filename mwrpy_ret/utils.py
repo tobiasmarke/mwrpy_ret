@@ -40,13 +40,11 @@ def append_data(data_in: dict, key: str, array: np.ndarray) -> dict:
     return data
 
 
-def get_file_list(path_to_files: str):
+def get_file_list(path_to_files: str, key: str):
     """Returns file list for specified path."""
-    f_list = sorted(glob.glob(path_to_files + "/*.nc"))
+    f_list = sorted(glob.glob(path_to_files + "*" + key + "*.nc"))
     if len(f_list) == 0:
-        f_list = sorted(glob.glob(path_to_files + "*.nc"))
-        if len(f_list) == 0:
-            logging.warning("Error: no files found in directory %s", path_to_files)
+        logging.warning("Error: no files found in directory %s", path_to_files)
     return f_list
 
 
@@ -67,9 +65,12 @@ def _get_filename(
     source: str, start: datetime.date, stop: datetime.date, site: str
 ) -> str:
     _, params = read_yaml_config(site)
-    filename = (
-        f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
-    )
+    if source == "standard_atmosphere":
+        filename = f"{site}_{source}.nc"
+    else:
+        filename = (
+            f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
+        )
 
     return os.path.join(params["data_out"], filename)
 
