@@ -75,3 +75,6 @@ params:
   lon_res: 0.1 # longitude resolution with which to get data in deg. should be multiple of model resolution
   lat_offset: [-0.1, 0.1] # corners of box relative to station within which to get model data for mean and std
   lon_offset: [-0.1, 0.1] # corners of box relative to station within which to get model data for mean and std
+
+global_specs:
+  title:

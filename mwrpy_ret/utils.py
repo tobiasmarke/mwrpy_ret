@@ -5,7 +5,7 @@ import logging
 import os
 import warnings
 from datetime import timezone
-from typing import Any, Iterator, NamedTuple
+from typing import Any, Iterator, Literal, NamedTuple
 
 import numpy as np
 import yaml
@@ -64,7 +64,7 @@ def get_processing_dates(args) -> tuple[str, str]:
 def _get_filename(
     source: str, start: datetime.date, stop: datetime.date, site: str
 ) -> str:
-    _, params = read_yaml_config(site)
+    params = read_config(site, "params")
     if source == "standard_atmosphere":
         filename = f"{site}_{source}.nc"
     else:
@@ -72,7 +72,11 @@ def _get_filename(
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
         )
 
-    return os.path.join(params["data_out"], filename)
+    return str(
+        os.path.join(
+            os.path.dirname(os.path.dirname(__file__)) + params["data_out"] + filename
+        )
+    )
 
 
 def isodate2date(date_str: str) -> datetime.date:
@@ -146,28 +150,27 @@ def isscalar(array: Any) -> bool:
     return False
 
 
-def read_yaml_config(site: str) -> tuple[dict, dict]:
-    """Reads config yaml files."""
-    dir_name = os.path.dirname(os.path.realpath(__file__))
+def read_config(site: str | None, key: Literal["global_specs", "params"]) -> dict:
+    data = _read_config_yaml()[key]
+    if site is not None:
+        data.update(_read_site_config_yaml(site)[key])
+    return data
 
-    site_file = os.path.join(dir_name, "site_config", f"{site}.yaml")
+
+def _read_config_yaml() -> dict:
+    dir_name = os.path.dirname(os.path.realpath(__file__))
+    inst_file = os.path.join(dir_name, "site_config", "config.yaml")
+    with open(inst_file, "r", encoding="utf8") as f:
+        return yaml.load(f, Loader=SafeLoader)
+
+
+def _read_site_config_yaml(site: str) -> dict:
+    dir_name = os.path.dirname(os.path.realpath(__file__))
+    site_file = os.path.join(dir_name, "site_config", site + ".yaml")
     if not os.path.isfile(site_file):
         raise NotImplementedError(f"Error: site config file {site_file} not found")
     with open(site_file, "r", encoding="utf8") as f:
-        site_config = yaml.load(f, Loader=SafeLoader)
-
-    conf_file = os.path.join(dir_name, "site_config", "config.yaml")
-    if not os.path.isfile(conf_file):
-        raise NotImplementedError(
-            f"Error: instrument config file {conf_file} not found"
-        )
-    with open(conf_file, "r", encoding="utf8") as f:
-        inst_config = yaml.load(f, Loader=SafeLoader)
-
-    for name in inst_config["params"].keys():
-        site_config["params"][name] = inst_config["params"][name]
-
-    return site_config["global_specs"], site_config["params"]
+        return yaml.load(f, Loader=SafeLoader)
 
 
 def read_bandwidth_coefficients() -> dict:
