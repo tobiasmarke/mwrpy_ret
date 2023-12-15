@@ -1,3 +1,8 @@
+## 0.5.1 – 2023-12-15
+
+- New site: Jülich
+- Added release-version tool
+
 ## 0.5.0 – 2023-12-12
 
 - Naming fixes
