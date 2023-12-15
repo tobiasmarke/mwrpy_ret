@@ -1,0 +1,14 @@
+# Site config file
+
+params:
+  altitude: 108.
+  longitude: 6.407
+  latitude: 50.906
+
+  # path to input data and path for processed files
+  data_ifs: /data/obs/site/jue/cloudnet/clu_processing/model/
+  data_era5: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
+  data_out: /home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/
+
+global_specs:
+  title: Radiative transfer data for Jülich, Germany
