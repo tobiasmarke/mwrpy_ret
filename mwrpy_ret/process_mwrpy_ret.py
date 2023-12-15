@@ -24,7 +24,7 @@ from mwrpy_ret.utils import (
     isodate2date,
     read_bandwidth_coefficients,
     read_beamwidth_coefficients,
-    read_yaml_config,
+    read_config,
     seconds2date,
 )
 
@@ -34,7 +34,8 @@ def main(args):
     _start_date, _stop_date = get_processing_dates(args)
     start_date = isodate2date(_start_date)
     stop_date = isodate2date(_stop_date)
-    global_attributes, params = read_yaml_config(args.site)
+    global_specs = read_config(args.site, "global_specs")
+    params = read_config(args.site, "params")
     if args.command == "get_era5":
         era5_request(args.site, params, start_date, stop_date)
     else:
@@ -47,7 +48,7 @@ def main(args):
             ret_in = ret_mwr.Ret(data_nc)
             ret_in.data = get_data_attributes(ret_in.data, args.command)
             logging.info(f"Saving output file {output_file}")
-            ret_mwr.save_rpg(ret_in, output_file, global_attributes, args.command)
+            ret_mwr.save_rpg(ret_in, output_file, global_specs, args.command)
 
 
 def process_input(
@@ -60,8 +61,13 @@ def process_input(
     data_nc: dict = {}
     if source == "ifs":
         for date in date_range(start_date, stop_date):
-            data_in = os.path.join(
-                params["data_ifs"], date.strftime("%Y/"), date.strftime("%Y%m%d")
+            data_in = str(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(__file__))
+                    + params["data_ifs"]
+                    + date.strftime("%Y/")
+                    + date.strftime("%Y%m%d")
+                )
             )
             file_name = get_file_list(data_in, "ecmwf")
             with nc.Dataset(file_name[0]) as ifs_data:
@@ -70,9 +76,7 @@ def process_input(
                     date_i = datetime.datetime.combine(
                         date, datetime.time(int(hour))
                     ).strftime("%Y%m%d%H")
-                    input_ifs = prepare_ifs(
-                        ifs_data, index, date_i, params["height"][-1]
-                    )
+                    input_ifs = prepare_ifs(ifs_data, index, date_i, site)
                     try:
                         output_hour = call_rad_trans(input_ifs, params)
                     except ValueError:
@@ -89,11 +93,18 @@ def process_input(
     elif source == "radiosonde":
         for date in date_range(start_date, stop_date):
             output_day: dict = {}
-            data_in = os.path.join(params["data_rs"], date.strftime("%Y/%m/%d/"))
+            data_in = str(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(__file__))
+                    + params["data_rs"]
+                    + date.strftime("%Y/%m/%d/")
+                )
+            )
             file_names = get_file_list(data_in, "radiosonde")
             for file in file_names:
                 output_hour = None
-                input_rs = prepare_radiosonde(file, params["height"][-1])
+                with nc.Dataset(file) as rs_data:
+                    input_rs = prepare_radiosonde(rs_data, site)
                 try:
                     output_hour = call_rad_trans(input_rs, params)
                 except ValueError:
@@ -109,22 +120,23 @@ def process_input(
                     data_nc = append_data(data_nc, key, array)
 
     elif source == "era5":
-        file_name = (
-            params["data_era5"]
-            + site
-            + "_era5_input_"
-            + start_date.strftime("%Y%m%d")
-            + "_"
-            + stop_date.strftime("%Y%m%d")
-            + ".nc"
+        file_name = str(
+            os.path.join(
+                os.path.dirname(os.path.dirname(__file__))
+                + params["data_era5"]
+                + site
+                + "_era5_input_"
+                + start_date.strftime("%Y%m%d")
+                + "_"
+                + stop_date.strftime("%Y%m%d")
+                + ".nc"
+            )
         )
         with nc.Dataset(file_name) as era5_data:
             for index, hour in enumerate(era5_data["time"]):
                 date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
                 output_hour = None
-                input_era5 = prepare_era5(
-                    era5_data, index, date_i, params["height"][-1]
-                )
+                input_era5 = prepare_era5(era5_data, index, date_i, site)
                 try:
                     output_hour = call_rad_trans(input_era5, params)
                 except ValueError:
@@ -139,9 +151,15 @@ def process_input(
                         data_nc = append_data(data_nc, key, array)
 
     elif source == "standard_atmosphere":
-        data_in = os.path.join(params["data_std"], "standard_atmospheres.nc")
+        data_in = str(
+            os.path.join(
+                os.path.dirname(os.path.dirname(__file__))
+                + params["data_std"]
+                + "standard_atmospheres.nc"
+            )
+        )
         with nc.Dataset(data_in) as sa_data:
-            input_sa = prepare_standard_atmosphere(sa_data, params["height"][-1])
+            input_sa = prepare_standard_atmosphere(sa_data, site)
             data_nc = call_rad_trans(input_sa, params)
 
     data_nc["height"] = np.array(params["height"]) + params["altitude"]
