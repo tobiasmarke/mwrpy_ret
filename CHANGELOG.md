@@ -1,3 +1,7 @@
+## 0.5.2 – 2023-12-15
+
+- Refactor paths
+
 ## 0.5.1 – 2023-12-15
 
 - New site: Jülich
