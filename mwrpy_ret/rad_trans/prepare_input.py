@@ -15,6 +15,18 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str, site: str) -> dic
     input_ifs["air_temperature"] = ifs_data["temperature"][index, height_ind]
     input_ifs["air_pressure"] = ifs_data["pressure"][index, height_ind]
     input_ifs["relative_humidity"] = ifs_data["rh"][index, height_ind]
+    clwc = ifs_data["ql"][index, height_ind]
+    mxr = metpy.calc.mixing_ratio_from_relative_humidity(
+        units.Quantity(input_ifs["air_pressure"], "Pa"),
+        units.Quantity(input_ifs["air_temperature"], "K"),
+        units.Quantity(input_ifs["relative_humidity"], "dimensionless"),
+    )
+    rho = metpy.calc.density(
+        units.Quantity(input_ifs["air_pressure"], "Pa"),
+        units.Quantity(input_ifs["air_temperature"], "K"),
+        mxr,
+    )
+    input_ifs["lwc"] = clwc * rho.magnitude
     input_ifs["time"] = seconds_since_epoch(date_i)
 
     return input_ifs
@@ -84,18 +96,18 @@ def prepare_era5(mod_data: dict, index: int, date_i: str, site: str) -> dict:
     ).magnitude[
         height_ind
     ]
-    # clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2)))[height_ind]
-    # mxr = metpy.calc.mixing_ratio_from_relative_humidity(
-    #     units.Quantity(input_era5["air_pressure"], "Pa"),
-    #     units.Quantity(input_era5["air_temperature"], "K"),
-    #     units.Quantity(input_era5["relative_humidity"], "dimensionless"),
-    # )
-    # rho = metpy.calc.density(
-    #     units.Quantity(input_era5["air_pressure"], "Pa"),
-    #     units.Quantity(input_era5["air_temperature"], "K"),
-    #     mxr,
-    # )
-    # input_era5["lwc"] = clwc * rho.magnitude
+    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2)))[height_ind]
+    mxr = metpy.calc.mixing_ratio_from_relative_humidity(
+        units.Quantity(input_era5["air_pressure"], "Pa"),
+        units.Quantity(input_era5["air_temperature"], "K"),
+        units.Quantity(input_era5["relative_humidity"], "dimensionless"),
+    )
+    rho = metpy.calc.density(
+        units.Quantity(input_era5["air_pressure"], "Pa"),
+        units.Quantity(input_era5["air_temperature"], "K"),
+        mxr,
+    )
+    input_era5["lwc"] = clwc * rho.magnitude
     input_era5["time"] = seconds_since_epoch(date_i)
 
     return input_era5

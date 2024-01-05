@@ -72,6 +72,11 @@ ATTRIBUTES_SOURCE = {
         standard_name="brightness_temperature",
         units="K",
     ),
+    "tb_pro": MetaData(
+        long_name="Microwave brightness temperature (prognostic) simulated from ",
+        standard_name="brightness_temperature",
+        units="K",
+    ),
     "air_temperature": MetaData(
         long_name="Temperature profile from ",
         standard_name="air_temperature",
@@ -88,6 +93,11 @@ ATTRIBUTES_SOURCE = {
     ),
     "lwp": MetaData(
         long_name="Column-integrated liquid water path derived from ",
+        standard_name="atmosphere_cloud_liquid_water_content",
+        units="kg m-2",
+    ),
+    "lwp_pro": MetaData(
+        long_name="Column-integrated liquid water path (prognostic) derived from ",
         standard_name="atmosphere_cloud_liquid_water_content",
         units="kg m-2",
     ),

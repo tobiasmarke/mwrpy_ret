@@ -277,6 +277,64 @@ def pseudoAdiabLapseRate(T, Ws):
     return x
 
 
+def get_cloud_prop(
+    base: np.ndarray, top: np.ndarray, height_int: np.ndarray, input_dat: dict
+) -> tuple[np.ndarray, np.ndarray, float]:
+    lwc, lwp, height_new, cloud_new, lwc_new = (
+        np.empty(0, np.float64),
+        0.0,
+        np.empty(0, np.float64),
+        np.empty(0, np.float64),
+        np.empty(0, np.float64),
+    )
+
+    for icl, _ in enumerate(top):
+        xcl = np.where(
+            (input_dat["height"][:] >= base[icl]) & (input_dat["height"][:] <= top[icl])
+        )[0]
+        if len(xcl) > 1:
+            if "lwc" in input_dat:
+                lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
+                lwp = lwp + np.sum(
+                    lwcx * np.diff(input_dat["height"][xcl[0] : xcl[-1] + 2])
+                )
+            else:
+                lwcx, cloudx = mod_ad(
+                    input_dat["air_temperature"][xcl],
+                    input_dat["air_pressure"][xcl],
+                    input_dat["height"][xcl],
+                )
+            cloud_new = np.hstack((cloud_new, cloudx))
+            lwc = np.hstack((lwc, lwcx))
+            lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
+
+            if len(height_new) == 0:
+                height_new = height_int[height_int < base[0]]
+            else:
+                height_new = np.hstack(
+                    (
+                        height_new,
+                        height_int[
+                            (height_int > top[icl - 1]) & (height_int < base[icl])
+                        ],
+                    )
+                )
+
+            # New vertical grid
+            height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
+            height_new = np.sort(np.hstack((height_new, cloud_new)))
+
+            # Distribute liquid water
+            lwc_new = np.zeros(len(height_new) - 1, np.float32)
+            if len(lwc) > 0:
+                _, xx, yy = np.intersect1d(
+                    height_new, cloud_new, assume_unique=False, return_indices=True
+                )
+                lwc_new[xx] = lwc[yy]
+
+    return height_new, lwc_new, lwp
+
+
 def interp_log_p(p, z, z_int):
     return np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
 
