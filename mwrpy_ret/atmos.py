@@ -278,7 +278,11 @@ def pseudoAdiabLapseRate(T, Ws):
 
 
 def get_cloud_prop(
-    base: np.ndarray, top: np.ndarray, height_int: np.ndarray, input_dat: dict
+    base: np.ndarray,
+    top: np.ndarray,
+    height_int: np.ndarray,
+    input_dat: dict,
+    method: str,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     lwc, lwp, height_new, cloud_new, lwc_new = (
         np.empty(0, np.float64),
@@ -293,7 +297,7 @@ def get_cloud_prop(
             (input_dat["height"][:] >= base[icl]) & (input_dat["height"][:] <= top[icl])
         )[0]
         if len(xcl) > 1:
-            if "lwc" in input_dat:
+            if method == "prognostic":
                 lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
                 lwp = lwp + np.sum(
                     lwcx * np.diff(input_dat["height"][xcl[0] : xcl[-1] + 2])
@@ -304,9 +308,10 @@ def get_cloud_prop(
                     input_dat["air_pressure"][xcl],
                     input_dat["height"][xcl],
                 )
+                lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
+
             cloud_new = np.hstack((cloud_new, cloudx))
             lwc = np.hstack((lwc, lwcx))
-            lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
 
             if len(height_new) == 0:
                 height_new = height_int[height_int < base[0]]

@@ -31,7 +31,7 @@ def rad_trans(
     )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
-    cloud_methods = ("detected", "prognostic") if "lwc" in input_dat else "detected"
+    cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else "detected"
     for method in cloud_methods:
         if method == "prognostic":
             top, base = detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
@@ -43,7 +43,9 @@ def rad_trans(
                 input_dat["air_pressure"][:],
             )
         if len(top) in np.linspace(1, 15, 15):
-            height_new, lwc_new, lwp = get_cloud_prop(base, top, height_int, input_dat)
+            height_new, lwc_new, lwp = get_cloud_prop(
+                base, top, height_int, input_dat, method
+            )
         else:
             height_new = height_int
             lwc_new = np.zeros(len(height_new) - 1, np.float32)
