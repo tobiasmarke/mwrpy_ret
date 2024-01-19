@@ -1,0 +1,13 @@
+# Site config file
+
+params:
+  altitude: 0.
+  longitude: 0.
+  latitude: 0.
+
+  # path to input data and path for processed files
+  data_std: /tests/data/
+  data_out: /tests/data/
+
+global_specs:
+  title: Radiative transfer data for standard atmosphere

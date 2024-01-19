@@ -65,8 +65,8 @@ def _get_filename(
     source: str, start: datetime.date, stop: datetime.date, site: str
 ) -> str:
     params = read_config(site, "params")
-    if source == "standard_atmosphere":
-        filename = f"{site}_{source}.nc"
+    if site == "standard_atmosphere":
+        filename = f"{site}.nc"
     else:
         filename = (
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"

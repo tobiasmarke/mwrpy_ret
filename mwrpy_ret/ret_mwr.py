@@ -150,7 +150,7 @@ def _write_vars2nc(nc_file: netCDF4.Dataset, mwr_variables: dict) -> None:
             fill_value = -99
 
         size = obj.dimensions or _get_dimensions(nc_file, obj.data)
-        if obj.name == "tb":
+        if obj.name in ("tb", "tb_pro"):
             size = ("time", "frequency", "elevation_angle")
         if obj.name in ("air_temperature", "absolute_humidity", "air_pressure"):
             size = ("time", "height")

@@ -59,6 +59,8 @@ def process_input(
     params: dict,
 ) -> dict:
     data_nc: dict = {}
+    if site == "standard_atmosphere":
+        source = "standard_atmosphere"
     if source == "ifs":
         for date in date_range(start_date, stop_date):
             data_in = str(

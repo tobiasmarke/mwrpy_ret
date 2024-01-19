@@ -27,6 +27,7 @@ def rad_trans(
     iwv = rh_to_iwv(
         input_dat["air_temperature"][:],
         input_dat["relative_humidity"][:],
+        input_dat["air_pressure"][:],
         input_dat["height"][:],
     )
 

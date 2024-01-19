@@ -47,6 +47,22 @@ def abshum_to_vap(T, p, rho):
     return p * m / (con.MW_RATIO + m)
 
 
+def e2q(e, p):
+    """
+    Calculate the specific humidity from water vapour pressure and air pressure.
+
+    Input:
+    e is in Pa
+    p is in Pa
+
+    Output
+    q in kg/kg
+    """
+
+    q = con.MW_RATIO * e / (p - (1 - con.MW_RATIO) * e)
+    return q
+
+
 def rh2a(rh, T):
     """
     Calculate the absolute humidity from relative humidity, air temperature,
@@ -63,6 +79,47 @@ def rh2a(rh, T):
 
     e = rh * calc_saturation_vapor_pressure(T)
     return e / (con.RW * T)
+
+
+def q2rh(q, T, p):
+    """
+    Calculate relative humidity from specific humidity
+
+    Input:
+    T is in K
+    p is in Pa
+    q in kg/kg
+
+    Output:
+    rh is in Pa/Pa
+    """
+
+    e = p / (con.MW_RATIO * ((1 / q) + (1 / con.MW_RATIO - 1)))
+    eStar = calc_saturation_vapor_pressure(T)
+    rh = e / eStar
+
+    return rh
+
+
+def rh2q(rh, T, p):
+    """
+    Calculate the specific humidity from relative humidity, air temperature,
+    and pressure.
+
+    Input:
+    T is in K
+    rh is in Pa/Pa
+    p is in Pa
+
+    Output
+    q in kg/kg
+    """
+
+    eStar = calc_saturation_vapor_pressure(T)
+    e = rh * eStar
+    q = e2q(e, p)
+
+    return q
 
 
 def moist_rho_rh(p, T, rh):
@@ -86,7 +143,20 @@ def moist_rho_rh(p, T, rh):
     return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
 
 
-def rh_to_iwv(T, rh, height):
+def moist_rho_q(p, T, q):
+    """
+    Input p is in Pa
+    T is in K
+    q is in kg/kg
+
+    Output:
+    density of moist air [kg/m^3]
+    """
+
+    return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
+
+
+def rh_to_iwv(T, rh, p, height):
     """
     Calculate the integrated water vapour
 
@@ -100,8 +170,10 @@ def rh_to_iwv(T, rh, height):
     iwv in kg/m^2
     """
 
-    absh = abs_hum(T, rh)
-    iwv = np.sum((absh[:-1] + absh[1:]) / 2.0 * np.diff(height))
+    q = rh2q(rh, T, p)
+    rho_moist = moist_rho_q(p, T, q)
+    hum = q * rho_moist
+    iwv = np.sum((hum[1:] + hum[:-1]) / 2.0 * np.diff(height))
 
     return iwv
 

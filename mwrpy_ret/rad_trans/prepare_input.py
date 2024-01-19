@@ -4,7 +4,7 @@ import numpy as np
 from metpy.units import units
 
 import mwrpy_ret.constants as con
-from mwrpy_ret.atmos import era5_geopot
+from mwrpy_ret.atmos import era5_geopot, q2rh
 from mwrpy_ret.utils import read_config, seconds_since_epoch
 
 
@@ -38,11 +38,11 @@ def prepare_standard_atmosphere(sa_data: nc.Dataset, site: str) -> dict:
     input_sa["height"] = input_sa["height"][height_ind]
     input_sa["air_temperature"] = sa_data.variables["t_atmo"][height_ind, 0]
     input_sa["air_pressure"] = sa_data.variables["p_atmo"][height_ind, 0] * 100.0
-    input_sa["relative_humidity"] = metpy.calc.relative_humidity_from_specific_humidity(
-        units.Quantity(input_sa["air_pressure"], "Pa"),
-        units.Quantity(input_sa["air_temperature"], "K"),
+    input_sa["relative_humidity"] = q2rh(
         sa_data.variables["q_atmo"][height_ind, 0],
-    ).magnitude
+        input_sa["air_temperature"],
+        input_sa["air_pressure"],
+    )
     input_sa["time"] = 0
 
     return input_sa
