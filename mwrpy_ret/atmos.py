@@ -1,4 +1,4 @@
-"""Module for atmsopheric functions."""
+"""Module for atmospheric functions."""
 import os
 
 import numpy as np
@@ -47,22 +47,6 @@ def abshum_to_vap(T, p, rho):
     return p * m / (con.MW_RATIO + m)
 
 
-def e2q(e, p):
-    """
-    Calculate the specific humidity from water vapour pressure and air pressure.
-
-    Input:
-    e is in Pa
-    p is in Pa
-
-    Output
-    q in kg/kg
-    """
-
-    q = con.MW_RATIO * e / (p - (1 - con.MW_RATIO) * e)
-    return q
-
-
 def rh2a(rh, T):
     """
     Calculate the absolute humidity from relative humidity, air temperature,
@@ -101,27 +85,6 @@ def q2rh(q, T, p):
     return rh
 
 
-def rh2q(rh, T, p):
-    """
-    Calculate the specific humidity from relative humidity, air temperature,
-    and pressure.
-
-    Input:
-    T is in K
-    rh is in Pa/Pa
-    p is in Pa
-
-    Output
-    q in kg/kg
-    """
-
-    eStar = calc_saturation_vapor_pressure(T)
-    e = rh * eStar
-    q = e2q(e, p)
-
-    return q
-
-
 def moist_rho_rh(p, T, rh):
     """
     Input:
@@ -143,20 +106,18 @@ def moist_rho_rh(p, T, rh):
     return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
 
 
-def moist_rho_q(p, T, q):
+def q_moist_rho(q):
     """
-    Input p is in Pa
-    T is in K
-    q is in kg/kg
+    Input q is in kg/kg
 
     Output:
     density of moist air [kg/m^3]
     """
 
-    return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
+    return con.RS * (1 + ((1 - con.MW_RATIO) / con.MW_RATIO) * q)
 
 
-def rh_to_iwv(T, rh, p, height):
+def rh_to_iwv(T, rh, height):
     """
     Calculate the integrated water vapour
 
@@ -170,9 +131,7 @@ def rh_to_iwv(T, rh, p, height):
     iwv in kg/m^2
     """
 
-    q = rh2q(rh, T, p)
-    rho_moist = moist_rho_q(p, T, q)
-    hum = q * rho_moist
+    hum = abs_hum(T, rh)
     iwv = np.sum((hum[1:] + hum[:-1]) / 2.0 * np.diff(height))
 
     return iwv
@@ -372,7 +331,7 @@ def get_cloud_prop(
             if method == "prognostic":
                 lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
                 lwp = lwp + np.sum(
-                    lwcx * np.diff(input_dat["height"][xcl[0] : xcl[-1] + 2])
+                    (lwcx[1:] + lwcx[:-1]) / 2 * np.diff(input_dat["height"][xcl])
                 )
             else:
                 lwcx, cloudx = mod_ad(

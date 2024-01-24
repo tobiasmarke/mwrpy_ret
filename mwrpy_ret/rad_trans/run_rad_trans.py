@@ -24,12 +24,14 @@ def rad_trans(
     lwp, lwp_pro = -999.0, -999.0
 
     # Integrated water vapor [kg/m²]
-    iwv = rh_to_iwv(
-        input_dat["air_temperature"][:],
-        input_dat["relative_humidity"][:],
-        input_dat["air_pressure"][:],
-        input_dat["height"][:],
-    )
+    if "iwv" in input_dat:
+        iwv = input_dat["iwv"]
+    else:
+        iwv = rh_to_iwv(
+            input_dat["air_temperature"][:],
+            input_dat["relative_humidity"][:],
+            input_dat["height"][:],
+        )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
     cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else "detected"
@@ -59,12 +61,17 @@ def rad_trans(
         temperature_new = np.interp(
             height_new, input_dat["height"][:], input_dat["air_temperature"][:]
         )
-        relhum_new = np.interp(
-            height_new,
-            input_dat["height"][:],
-            input_dat["relative_humidity"][:],
-        )
-        abshum_new = abs_hum(temperature_new, relhum_new)
+        if "absolute_humidity" in input_dat:
+            abshum_new = np.interp(
+                height_new, input_dat["height"][:], input_dat["absolute_humidity"][:]
+            )
+        else:
+            relhum_new = np.interp(
+                height_new,
+                input_dat["height"][:],
+                input_dat["relative_humidity"][:],
+            )
+            abshum_new = abs_hum(temperature_new, relhum_new)
 
         # Radiative transport
         tb[0, :, 0], tau_k, tau_v = STP_IM10(
@@ -97,16 +104,29 @@ def rad_trans(
             lwp_pro, tb_pro = lwp, tb
 
     # Interpolate to final grid
-    pressure_int = interp_log_p(
-        input_dat["air_pressure"][:], input_dat["height"][:], height_int
+    pressure_int = np.interp(
+        height_int,
+        input_dat["height"][:] - input_dat["height"][0],
+        input_dat["air_pressure"][:],
     )
     temperature_int = np.interp(
-        height_int, input_dat["height"][:], input_dat["air_temperature"][:]
+        height_int,
+        input_dat["height"][:] - input_dat["height"][0],
+        input_dat["air_temperature"][:],
     )
-    relhum_int = np.interp(
-        height_int, input_dat["height"][:], input_dat["relative_humidity"][:]
-    )
-    abshum_int = abs_hum(temperature_int, relhum_int)
+    if "absolute_humidity" in input_dat:
+        abshum_int = np.interp(
+            height_int,
+            input_dat["height"][:] - input_dat["height"][0],
+            input_dat["absolute_humidity"][:],
+        )
+    else:
+        relhum_new = np.interp(
+            height_int,
+            input_dat["height"][:] - input_dat["height"][0],
+            input_dat["relative_humidity"][:],
+        )
+        abshum_int = abs_hum(temperature_int, relhum_new)
 
     output = {
         "time": np.asarray([input_dat["time"]]),

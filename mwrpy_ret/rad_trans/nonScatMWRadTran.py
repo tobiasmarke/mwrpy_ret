@@ -22,7 +22,7 @@ def STP_IM10(
     tau_v: np.ndarray | None = None,
 ):
     """
-    non-scattering microwave radiative transfer using Rosenkranz 1998 gas
+    non-scattering microwave radiative transfer using Rosenkranz 2022 gas
     absorption
     """
 
