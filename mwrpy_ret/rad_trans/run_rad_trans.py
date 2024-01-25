@@ -5,10 +5,10 @@ from mwrpy_ret.atmos import (
     detect_cloud_mod,
     detect_liq_cloud,
     get_cloud_prop,
+    hum_to_iwv,
     interp_log_p,
-    rh_to_iwv,
 )
-from mwrpy_ret.rad_trans import STP_IM10
+from mwrpy_ret.rad_trans import RT_RK22
 
 
 def rad_trans(
@@ -24,13 +24,18 @@ def rad_trans(
     lwp, lwp_pro = -999.0, -999.0
 
     # Integrated water vapor [kg/m²]
-    if "iwv" in input_dat:
-        iwv = input_dat["iwv"]
+    if "absolute_humidity" in input_dat:
+        iwv = hum_to_iwv(
+            input_dat["air_temperature"][:],
+            input_dat["absolute_humidity"][:],
+            input_dat["height"][:],
+        )
     else:
-        iwv = rh_to_iwv(
+        iwv = hum_to_iwv(
             input_dat["air_temperature"][:],
             input_dat["relative_humidity"][:],
             input_dat["height"][:],
+            "rh",
         )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
@@ -74,7 +79,7 @@ def rad_trans(
             abshum_new = abs_hum(temperature_new, relhum_new)
 
         # Radiative transport
-        tb[0, :, 0], tau_k, tau_v = STP_IM10(
+        tb[0, :, 0], tau_k, tau_v = RT_RK22(
             height_new,
             temperature_new,
             pressure_new,
@@ -87,7 +92,7 @@ def rad_trans(
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _ = STP_IM10(
+                tb[0, :, i_ang + 1], _, _ = RT_RK22(
                     height_new,
                     temperature_new,
                     pressure_new,

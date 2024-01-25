@@ -117,7 +117,7 @@ def q_moist_rho(q):
     return con.RS * (1 + ((1 - con.MW_RATIO) / con.MW_RATIO) * q)
 
 
-def rh_to_iwv(T, rh, height):
+def hum_to_iwv(T, hum, height, opt: str = "ah"):
     """
     Calculate the integrated water vapour
 
@@ -131,7 +131,8 @@ def rh_to_iwv(T, rh, height):
     iwv in kg/m^2
     """
 
-    hum = abs_hum(T, rh)
+    if opt == "rh":
+        hum = abs_hum(T, hum)
     iwv = np.sum((hum[1:] + hum[:-1]) / 2.0 * np.diff(height))
 
     return iwv

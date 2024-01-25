@@ -9,12 +9,12 @@ from mwrpy_ret.utils import seconds_since_epoch
 
 
 def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
-    input_ifs: dict = {
-        "height": ifs_data["height"][index, :],
-        "air_temperature": ifs_data["temperature"][index, :],
-        "air_pressure": ifs_data["pressure"][index, :],
-        "relative_humidity": ifs_data["rh"][index, :],
-    }
+    input_ifs: dict = dict(
+        height=ifs_data["height"][index, :],
+        air_temperature=ifs_data["temperature"][index, :],
+        air_pressure=ifs_data["pressure"][index, :],
+        relative_humidity=ifs_data["rh"][index, :],
+    )
     input_ifs["lwc"] = ifs_data["ql"][index, :] * (
         input_ifs["air_pressure"]
         / (input_ifs["air_temperature"] * q_moist_rho(ifs_data["q"][index, :]))
@@ -25,16 +25,11 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
-    input_sa: dict = {
-        "height": sa_data.variables["height"][:] * 1000.0,
-        "air_temperature": sa_data.variables["t_atmo"][:, 0],
-        "air_pressure": sa_data.variables["p_atmo"][:, 0] * 100.0,
-        "absolute_humidity": sa_data.variables["a_atmo"][:, 0],
-    }
-    input_sa["iwv"] = np.sum(
-        (input_sa["absolute_humidity"][1:] + input_sa["absolute_humidity"][:-1])
-        / 2.0
-        * np.diff(input_sa["height"])
+    input_sa: dict = dict(
+        height=sa_data.variables["height"][:] * 1000.0,
+        air_temperature=sa_data.variables["t_atmo"][:, 0],
+        air_pressure=sa_data.variables["p_atmo"][:, 0] * 100.0,
+        absolute_humidity=sa_data.variables["a_atmo"][:, 0],
     )
     input_sa["relative_humidity"] = q2rh(
         sa_data.variables["q_atmo"][:, 0],

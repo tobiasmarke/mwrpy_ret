@@ -7,7 +7,7 @@ from mwrpy_ret.atmos import abshum_to_vap
 from mwrpy_ret.utils import GAUSS, dcerror, loadCoeffsJSON
 
 
-def STP_IM10(
+def RT_RK22(
     # [m] states grid of T_final [K], p_final [Pa], q_final [kgm^-3]
     z_final,
     T_final,
@@ -116,10 +116,9 @@ def TAU_CALC(
     f,  # freq. [GHz]
 ):
     """
-    Abstract:
     subroutine to determine optical thickness tau
     at height k (index counting from bottom of zgrid)
-    on the basis of Rosenkranz 1998 water vapor and absorption model
+    on the basis of Rosenkranz water vapor and absorption model
     Rayleigh calculations
     """
 
@@ -179,29 +178,12 @@ def ABWV_R22(
     F,  # freqeuncy in GHz
 ):
     """
-    OUPUT:
-    ALPHA                        absorption coefficient in nepers(??)/km
-    KEYWORDS:
-     Abstract:
-    PURPOSE- COMPUTE ABSORPTION COEF IN ATMOSPHERE DUE TO WATER VAPOR
-
-    CALLING SEQUENCE PARAMETERS-SPECIFICATIONS
-
-          NAME    UNITS    I/O  DESCRIPTON            VALID RANGE
-          T       KELVIN    I   TEMPERATURE
-          P       MILLIBAR  I   PRESSURE              .1 TO 1000
-          RHO     G/M**3    I   WATER VAPOR DENSITY
-          F       GHZ       I   FREQUENCY             0 TO 800
-          ALPHA   NEPERS/KM O   ABSORPTION COEFFICIENT
-
-       REFERENCES-
-       P.W. ROSENKRANZ, RADIO SCIENCE V.33, PP.919-928 (1998) V.34, P.1025
-     (1999).
-
-       LINE INTENSITIES SELECTION THRESHOLD=
-         HALF OF CONTINUUM ABSORPTION AT 1000 MB.
-       WIDTHS MEASURED AT 22, 183, 380 GHZ, OTHERS CALCULATED.
-         A.BAUER ET AL.ASA WORKSHOP (SEPT. 1989) (380GHz).
+    ABSORPTION COEF IN ATMOSPHERE DUE TO WATER VAPOR
+      T       KELVIN    I   TEMPERATURE
+      P       MILLIBAR  I   PRESSURE              .1 TO 1000
+      RHO     G/M**3    I   WATER VAPOR DENSITY
+      F       GHZ       I   FREQUENCY             0 TO 800
+      ALPHA   NEPERS/KM O   ABSORPTION COEFFICIENT
     """
 
     path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/h2o_list.json"
@@ -219,10 +201,12 @@ def ABWV_R22(
     else:
         PVAP = RHO * T * 4.615228e-3
         PDA = P - PVAP
-        TI = 300.0 / T
+        TI = CF["Trefcon"] / T
 
         CON = (
-            (5.9197e-10 * PDA * TI**3 + 1.4162e-8 * PVAP * TI**7.5) * PVAP * F**2
+            (CF["Cf"] * PDA * TI ** CF["Xcf"] + CF["Cs"] * PVAP * TI ** CF["Xcs"])
+            * PVAP
+            * F**2
         )
         REFTLINE = 296.0
         TI = REFTLINE / T
@@ -297,52 +281,25 @@ def ABWV_R22(
 
 def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
     """
-    #
-    PURPOSE: RETURNS ABSORPTION COEFFICIENT DUE TO OXYGEN IN AIR,
-             IN NEPERS/KM
-    #
-     5/1/95  P. Rosenkranz
-     11/5/97  P. Rosenkranz - 1- line modification.
-     12/16/98 pwr - updated submm freq's and intensities from HITRAN96
-    #
-    ARGUMENTS:
-    TEMP, PRES, VAPDEN, FREQ
-    NAME    UNITS    DESCRIPTION        VALID RANGE
-    #
+    ABSORPTION COEFFICIENT DUE TO OXYGEN IN AIR
     TEMP    KELVIN   TEMPERATURE        UNCERTAIN, but believed to be
                                          valid for atmosphere
     PRES   MILLIBARS PRESSURE           3 TO 1000
-    VAPDEN  G/M^3   WATER VAPOR DENSITY  (ENTERS LINEWIDTH CALCULATION
+    VAPDEN  G/M^3    WV DENSITY         (ENTERS LINEWIDTH CALCULATION
                      DUE TO GREATER BROADENING EFFICIENCY OF H2O)
     FREQ    GHZ      FREQUENCY          0 TO 900
-    #
-    REFERENCES FOR EQUATIONS AND COEFFICIENTS:
-    P.W. Rosenkranz, CHAP. 2 and appendix, in ATMOSPHERIC REMOTE SENSING
-     BY MICROWAVE RADIOMETRY (M.A. Janssen, ed., 1993).
-    H.J. Liebe et al, JQSRT V.48, PP.629-643 (1992).
-    M.J. Schwartz, Ph.D. thesis, M.I.T. (1997).
-    SUBMILLIMETER LINE INTENSITIES FROM HITRAN96.
-    This version differs from Liebe's MPM92 in two significant respects:
-    1. It uses the modification of the 1- line width temperature dependence
-    recommended by Schwartz: (1/T).
-    2. It uses the same temperature dependence (X) for submillimeter
-    line widths as in the 60 GHz band: (1/T)^0.8
-
-    LINES ARE ARRANGED 1-,1+,3-,3+,ETC. IN SPIN-ROTATION SPECTRUM
     """
 
     path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/o2_list.json"
     CF = loadCoeffsJSON(path)
 
-    WB300 = 0.56
-    X = 0.754
     TH = 300.0 / TEMP
     TH1 = TH - 1.0
-    B = TH**X
+    B = TH ** CF["X"]
     PRESWV = VAPDEN * TEMP / 216.68
     PRESDA = PRES - PRESWV
     DEN = 0.001 * (PRESDA * B + 1.2 * PRESWV * TH)
-    DFNR = WB300 * DEN
+    DFNR = CF["WB300"] * DEN
     PE2 = DEN**2
 
     SUM = 1.584e-17 * FREQ**2 * DFNR / (TH * (FREQ**2 + DFNR**2))
@@ -371,7 +328,7 @@ def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
 
 def ABN2_R22(T, P, F):
     """
-    ****ABSN2 = ABSORPTION COEFFICIENT DUE TO NITROGEN IN AIR (NEPER/KM)
+    ABSORPTION COEFFICIENT DUE TO NITROGEN IN AIR
     T = TEMPERATURE (K)
     P = PRESSURE (MB)
     F = FREQUENCY (GHZ)
@@ -384,7 +341,7 @@ def ABN2_R22(T, P, F):
 
 
 def ABLIQ_R22(LWC, F, T):
-    """COMPUTES POWER ABSORPTION COEFFICIENT IN NEPERS/KM
+    """POWER ABSORPTION COEFFICIENT
     BY SUSPENDED CLOUD LIQUID WATER DROPLETS."""
 
     ALPHA = np.zeros(len(F), np.float32)
