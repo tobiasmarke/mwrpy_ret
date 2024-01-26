@@ -193,7 +193,7 @@ def ABWV_R22(
     n_f = len(F)
 
     # ****LOCAL VARIABLES:
-    NLINES = 16
+    NLINES = len(CF["FL"])
     DF = np.zeros((2, n_f))
 
     if RHO.all() <= 0:
@@ -253,7 +253,7 @@ def ABWV_R22(
                 # DO FOR POSITIVE AND NEGATIVE RESONANCES
                 RES = np.zeros(n_f)
                 for J in range(2):
-                    if (J == 1) & (WIDTH2 > 0.0):
+                    if (J == 0) & (WIDTH2 > 0.0):
                         INDEX1 = np.abs(DF[J, :]) < 10.0 * WIDTH0
                         INDEX2 = (np.abs(DF[J, :]) < 750) & ~INDEX1
                         XC = (WIDTH0 - 1.5 * WIDTH2 + (DF[J] + 1.5 * DELTA2) * 1j) / (

@@ -8,7 +8,7 @@ from mwrpy_ret.atmos import (
     hum_to_iwv,
     interp_log_p,
 )
-from mwrpy_ret.rad_trans import RT_RK22
+from mwrpy_ret.rad_trans import RT_RK23
 
 
 def rad_trans(
@@ -79,7 +79,7 @@ def rad_trans(
             abshum_new = abs_hum(temperature_new, relhum_new)
 
         # Radiative transport
-        tb[0, :, 0], tau_k, tau_v = RT_RK22(
+        tb[0, :, 0], tau_k, tau_v = RT_RK23(
             height_new,
             temperature_new,
             pressure_new,
@@ -92,7 +92,7 @@ def rad_trans(
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _ = RT_RK22(
+                tb[0, :, i_ang + 1], _, _ = RT_RK23(
                     height_new,
                     temperature_new,
                     pressure_new,

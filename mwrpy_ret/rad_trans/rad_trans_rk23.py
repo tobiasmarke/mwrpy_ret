@@ -147,7 +147,7 @@ def TAU_CALC(
 
         # ****gas absorption
         # water vapor
-        AWV = ABWV_R22(rhow_mean * 1000.0, T_mean, p_mean / 100.0, f) / 1000.0
+        AWV = ABWV_R23(rhow_mean * 1000.0, T_mean, p_mean / 100.0, f) / 1000.0
 
         # oxygen
         AO2 = ABO2_R23(T_mean, p_mean / 100.0, rhow_mean * 1000.0, f) / 1000.0
@@ -171,7 +171,7 @@ def TAU_CALC(
     return tau
 
 
-def ABWV_R22(
+def ABWV_R23(
     RHO,  # abs. humidity in gm-3
     T,  # temp. in K
     P,  # pressure in hPa
@@ -186,97 +186,113 @@ def ABWV_R22(
       ALPHA   NEPERS/KM O   ABSORPTION COEFFICIENT
     """
 
-    path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/h2o_list.json"
+    path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r23/h2o_list.json"
     CF = loadCoeffsJSON(path)
+    CF["XW2"][CF["XW2"] <= 0.0] = CF["X"][CF["XW2"] <= 0.0]
+    CF["XW2S"][CF["XW2S"] <= 0.0] = CF["XS"][CF["XW2S"] <= 0.0]
 
-    # ****number of frequencies
-    n_f = len(F)
+    PVAP = RHO * T * 4.615228e-3
+    PDA = P - PVAP
+    TI = 296.0 / T
+    TILN = np.log(TI)
+    TI2 = np.exp(2.5 * TILN)
 
-    # ****LOCAL VARIABLES:
-    NLINES = 16
-    DF = np.zeros((2, n_f))
-
-    if RHO.all() <= 0:
-        ALPHA = np.zeros(n_f)
-    else:
-        PVAP = RHO * T * 4.615228e-3
-        PDA = P - PVAP
-        TI = CF["Trefcon"] / T
-
-        CON = (
-            (CF["Cf"] * PDA * TI ** CF["Xcf"] + CF["Cs"] * PVAP * TI ** CF["Xcs"])
-            * PVAP
-            * F**2
+    NLINES = len(CF["FL"])
+    WIDTH0, WIDTH2 = np.zeros(NLINES, np.float32), np.zeros(NLINES, np.float32)
+    DELTA2, SHIFT = np.zeros(NLINES, np.float32), np.zeros(NLINES, np.float32)
+    S = np.zeros(NLINES, np.float32)
+    for i in range(NLINES):
+        WIDTH0[i] = (
+            CF["W0"][i] / 1000.0 * PDA * TI ** CF["X"][i]
+            + CF["W0S"][i] / 1000.0 * PVAP * TI ** CF["XS"][i]
         )
-        REFTLINE = 296.0
-        TI = REFTLINE / T
-        TILN = np.log(TI)
-        TI2 = np.exp(2.5 * TILN)
+        if CF["W2"][i] > 0.0:
+            WIDTH2[i] = (
+                CF["W2"][i] / 1000.0 * PDA * TI ** CF["XW2"][i]
+                + CF["W2S"][i] / 1000.0 * PVAP * TI ** CF["XW2S"][i]
+            )
+        else:
+            WIDTH2[i] = 0.0
+        DELTA2[i] = CF["D2"][i] / 1000.0 * PDA + CF["D2S"][i] / 1000.0 * PVAP
+        SHIFTF = (
+            CF["SH"][i]
+            / 1000.0
+            * PDA
+            * (1.0 - CF["AAIR"][i] * TILN)
+            * TI ** CF["XH"][i]
+        )
+        SHIFTS = (
+            CF["SHS"][i]
+            / 1000.0
+            * PVAP
+            * (1.0 - CF["ASELF"][i] * TILN)
+            * TI ** CF["XHS"][i]
+        )
+        SHIFT[i] = SHIFTF + SHIFTS
+        S[i] = CF["S1"][i] * TI2 * np.exp(CF["B2"][i] * (1.0 - TI))
 
-        # ****ADD RESONANCES
-        SUM = np.zeros(n_f)
-        for I in range(NLINES):
-            if np.abs(F - CF["FL"][I]).any() < 750.1:
-                WIDTH0 = (CF["W0"][I] / 1000.0) * PDA * TI ** CF["X"][I] + (
-                    CF["W0S"][I] / 1000.0
-                ) * PVAP * TI ** CF["XS"][I]
-                if CF["W2"][I] > 0:
-                    WIDTH2 = (CF["W2"][I] / 1000.0) * PDA * TI ** CF["XW2"][I] + (
-                        CF["W2S"][I] / 1000.0
-                    ) * PVAP * TI ** CF["XW2S"][I]
-                else:
-                    WIDTH2 = 0  # SUM = 0
-
-                DELTA2 = (CF["D2"][I] / 1000.0) * PDA + (CF["D2S"][I] / 1000.0) * PVAP
-                SHIFTF = (
-                    (CF["SH"][I] / 1000.0)
-                    * PDA
-                    * (1.0 - CF["AAIR"][I] * TILN)
-                    * TI ** CF["XH"][I]
-                )
-                SHIFTS = (
-                    (CF["SHS"][I] / 1000.0)
-                    * PVAP
-                    * (1.0 - CF["ASELF"][I] * TILN)
-                    * TI ** CF["XHS"][I]
-                )
-                SHIFT = SHIFTF + SHIFTS
-                WSQ = WIDTH0**2
-
-                S = CF["S1"][I] * TI2 * np.exp(CF["B2"][I] * (1.0 - TI))
-                DF[0, :] = F - CF["FL"][I] - SHIFT
-                DF[1, :] = F + CF["FL"][I] + SHIFT
-
-                # USE CLOUGH'S DEFINITION OF LOCAL LINE CONTRIBUTION
-                BASE = WIDTH0 / (562500.0 + WSQ)
-
-                # DO FOR POSITIVE AND NEGATIVE RESONANCES
-                RES = np.zeros(n_f)
-                for J in range(2):
-                    if (J == 1) & (WIDTH2 > 0.0):
-                        INDEX1 = np.abs(DF[J, :]) < 10.0 * WIDTH0
-                        INDEX2 = (np.abs(DF[J, :]) < 750) & ~INDEX1
-                        XC = (WIDTH0 - 1.5 * WIDTH2 + (DF[J] + 1.5 * DELTA2) * 1j) / (
-                            WIDTH2 - DELTA2 * 1j
-                        )
-                        XRT = np.sqrt(XC)
-                        PXW = (
+    TI = CF["Trefcon"] / T
+    ALPHA = H2OCON(F, T)
+    CONF = CF["Cf"] * TI ** CF["Xcf"]
+    for k, FREQ in enumerate(F):
+        SUMM = 0.0
+        for i in range(NLINES):
+            if np.abs(FREQ - CF["FL"][i]) <= 750.1:
+                DF = np.zeros(2, np.float32)
+                DF[0] = FREQ - CF["FL"][i] - SHIFT[i]
+                DF[1] = FREQ + CF["FL"][i] + SHIFT[i]
+                WSQ = WIDTH0[i] ** 2
+                BASE = WIDTH0[i] / (562500.0 + WSQ)
+                RES = 0.0
+                for j in range(2):
+                    if WIDTH2[i] > 0.0 and j == 0 and np.abs(DF[j]) < 10.0 * WIDTH0[i]:
+                        Xc = (
+                            (WIDTH0[i] - 1.5 * WIDTH2[i])
+                            + ((DF[j] + 1.5 * DELTA2[i]) * 1j)
+                        ) / (WIDTH2[i] - DELTA2[i] * 1j)
+                        Xrt = np.sqrt(Xc)
+                        pxw = (
                             1.77245385090551603
-                            * XRT
-                            * dcerror(-np.imag(XRT), np.real(XRT))
+                            * Xrt
+                            * dcerror(-np.imag(Xrt), np.real(Xrt))
                         )
-                        SD = 2.0 * (1.0 - PXW) / (WIDTH2 - DELTA2 * 1j)
-                        RES[INDEX1] = (RES + np.real(SD) - BASE)[INDEX1]
-                        RES[INDEX2] = (RES + WIDTH0 / (DF[J] ** 2 + WSQ) - BASE)[INDEX2]
-                    else:
-                        INDEX = np.abs(DF[J, :]) < 750
-                        RES[INDEX] = (RES + WIDTH0 / (DF[J] ** 2 + WSQ) - BASE)[INDEX]
+                        SD = 2.0 * (1.0 - pxw) / (WIDTH2[i] - DELTA2[i] * 1j)
+                        RES = RES + np.real(SD) - BASE
+                    elif np.abs(DF[j]) < 750.0:
+                        RES = RES + WIDTH0[i] / (DF[j] ** 2 + WSQ) - BASE
 
-                SUM = SUM + S * RES * (F / CF["FL"][I]) ** 2
+                SUMM = SUMM + S[i] * RES * (FREQ / CF["FL"][i]) ** 2
 
-        ALPHA = 1.0e-10 * RHO * SUM / (np.pi * 2.9915075e-23) + CON
+        CON = (CONF * PDA + ALPHA[k] * PVAP) * PVAP * FREQ**2
+        ALPHA[k] = 1.0e-10 * RHO * SUMM / (np.pi * 2.9915075e-23) + CON
 
     return ALPHA
+
+
+def H2OCON(F, T):
+    SELFCON = [2.877e-21, 2.855e-21, 2.731e-21, 2.49e-21, 2.178e-21, 1.863e-21]
+    SELFTEXP = [6.413, 6.414, 6.275, 6.049, 5.789, 5.557]
+
+    THETA = 296.0 / T
+    A = np.zeros(7, np.float32)
+    for j in np.linspace(1, 6, 6, dtype=int):
+        A[j] = 6.532e12 * SELFCON[j - 1] * THETA ** (SELFTEXP[j - 1] + 3.0)
+    A[0] = A[1]
+
+    CS = np.zeros(len(F), np.float32)
+    for i, FREQ in enumerate(F):
+        FJ = FREQ / 299.792458
+        J = np.int32(np.min((FJ, 3)))
+        P = FJ - np.float32(J)
+        C = (3.0 - 2.0 * P) * P * P
+        B = 0.5 * P * (1.0 - P)
+        B1 = B * (1.0 - P)
+        B2 = B * P
+        CS[i] = (
+            -A[J] * B1 + A[J + 1] * (1.0 - C + B2) + A[J + 2] * (C + B1) - A[J + 3] * B2
+        )
+
+    return CS
 
 
 def ABO2_R23(TEMP, PRES, VAPDEN, FREQ):

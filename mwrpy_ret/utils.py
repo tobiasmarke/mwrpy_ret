@@ -286,9 +286,16 @@ def dcerror(x, y):
         ) * ZH + b[0]
         w = ASUM / BSUM
         w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
-        DCERROR = w
-        DCERROR[y < 0] = w2[y < 0]
-        return DCERROR
+        if hasattr(y, "__len__"):
+            DCERROR = w
+            DCERROR[y < 0] = w2[y < 0]
+        else:
+            if y >= 0.0:
+                DCERROR = w
+            else:
+                DCERROR = w2
+
+    return DCERROR
 
 
 def GAUSS(ape_ang, theta):
