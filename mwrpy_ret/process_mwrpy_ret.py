@@ -165,6 +165,7 @@ def process_input(
             data_nc = call_rad_trans(input_sa, params)
 
     data_nc["height"] = np.array(params["height"]) + params["altitude"]
+    data_nc["height_in"] = data_nc["height_in"][0, :]
     data_nc["frequency"] = np.array(params["frequency"])
     data_nc["elevation_angle"] = np.array(params["elevation_angle"])
     return data_nc

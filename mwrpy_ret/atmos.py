@@ -6,8 +6,6 @@ import pandas as pd
 
 import mwrpy_ret.constants as con
 
-HPA_TO_P = 100
-
 
 def spec_heat(T: np.ndarray) -> np.ndarray:
     """Specific heat for evaporation (J/kg)"""
@@ -38,31 +36,14 @@ def calc_saturation_vapor_pressure(temperature: np.ndarray) -> np.ndarray:
             + 0.42873e-3 * (10 ** (4.76955 * (1 - ratio)) - 1)
             + 0.78614
         )
-    ) * HPA_TO_P
+    ) * 100.0
 
 
 def abshum_to_vap(T, p, rho):
     e = rho * con.RW * T
-    m = con.MW_RATIO * e / (p - e) / 1000.0
+    m = con.MW_RATIO * e / (p - e)
+    m[m == 0.0] = 1e-8
     return p * m / (con.MW_RATIO + m)
-
-
-def rh2a(rh, T):
-    """
-    Calculate the absolute humidity from relative humidity, air temperature,
-    and pressure.
-
-    Input T is in K
-    rh is in Pa/Pa
-    p is in Pa
-    Output
-    a in kg/m^3
-
-    Source: Kraus: Chapter 8.1.2
-    """
-
-    e = rh * calc_saturation_vapor_pressure(T)
-    return e / (con.RW * T)
 
 
 def q2rh(q, T, p):
@@ -80,9 +61,8 @@ def q2rh(q, T, p):
 
     e = p / (con.MW_RATIO * ((1 / q) + (1 / con.MW_RATIO - 1)))
     eStar = calc_saturation_vapor_pressure(T)
-    rh = e / eStar
 
-    return rh
+    return e / eStar
 
 
 def moist_rho_rh(p, T, rh):
@@ -94,9 +74,6 @@ def moist_rho_rh(p, T, rh):
 
     Output:
     density of moist air [kg/m^3]
-
-    Example:
-    moist_rho_rh(p,T,rh,q_ice,q_snow,q_rain,q_cloud,q_graupel,q_hail)
     """
 
     eStar = calc_saturation_vapor_pressure(T)
@@ -117,23 +94,19 @@ def q_moist_rho(q):
     return con.RS * (1 + ((1 - con.MW_RATIO) / con.MW_RATIO) * q)
 
 
-def hum_to_iwv(T, hum, height, opt: str = "ah"):
+def hum_to_iwv(ahum, height):
     """
     Calculate the integrated water vapour
 
     Input:
-    T is in K
-    rh is in Pa/Pa
-    p is in Pa
-    z is in m
+    ahum is in kg/m^3
+    height is in m
 
     Output
     iwv in kg/m^2
     """
 
-    if opt == "rh":
-        hum = abs_hum(T, hum)
-    iwv = np.sum((hum[1:] + hum[:-1]) / 2.0 * np.diff(height))
+    iwv = np.sum((ahum[1:] + ahum[:-1]) / 2.0 * np.diff(height))
 
     return iwv
 
@@ -237,10 +210,10 @@ def adiab(i, T, P, z):
         #   5. Compute actual cloud temperature
 
         R = moist_rho_rh(P[j], T[j], 1.0)
-        RWV = rh2a(1.0, T[j])
+        RWV = abs_hum(T[j], np.ones(1, np.float32))
         WS = RWV / (R - RWV)
         DTPS = pseudoAdiabLapseRate(T[j], WS)
-        TCL = TCL - DTPS * (deltaz)
+        TCL = TCL - DTPS * deltaz
 
         #   Compute adiabatic LWC
 
@@ -251,7 +224,7 @@ def adiab(i, T, P, z):
         #   5. Compute adiabatic LWC
 
         R = moist_rho_rh(P[j], TCL, 1.0)
-        RWV = rh2a(1.0, TCL)
+        RWV = abs_hum(TCL, np.ones(1, np.float32))
         WS = RWV / (R - RWV)
         L = spec_heat(TCL)
 
@@ -332,7 +305,7 @@ def get_cloud_prop(
             if method == "prognostic":
                 lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
                 lwp = lwp + np.sum(
-                    (lwcx[1:] + lwcx[:-1]) / 2 * np.diff(input_dat["height"][xcl])
+                    (lwcx[1:] + lwcx[:-1]) / 2.0 * np.diff(input_dat["height"][xcl])
                 )
             else:
                 lwcx, cloudx = mod_ad(

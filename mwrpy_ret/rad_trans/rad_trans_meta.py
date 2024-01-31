@@ -53,6 +53,11 @@ ATTRIBUTES_COM = {
         standard_name="height_above_mean_sea_level",
         units="m",
     ),
+    "height_in": MetaData(
+        long_name="Height above mean sea level (from input data)",
+        standard_name="height_above_mean_sea_level",
+        units="m",
+    ),
     "frequency": MetaData(
         long_name="Nominal centre frequency of microwave channels",
         standard_name="radiation_frequency",
@@ -78,17 +83,17 @@ ATTRIBUTES_SOURCE = {
         units="K",
     ),
     "air_temperature": MetaData(
-        long_name="Temperature profile from ",
+        long_name="Temperature profile interpolated from ",
         standard_name="air_temperature",
         units="K",
     ),
     "air_pressure": MetaData(
-        long_name="Pressure profile from ",
+        long_name="Pressure profile interpolated from ",
         standard_name="air_pressure",
         units="Pa",
     ),
     "absolute_humidity": MetaData(
-        long_name="Absolute humidity profile from ",
+        long_name="Absolute humidity profile interpolated from ",
         units="kg m-3",
     ),
     "lwp": MetaData(
@@ -105,5 +110,19 @@ ATTRIBUTES_SOURCE = {
         long_name="Column-integrated water vapour derived from ",
         standard_name="atmosphere_mass_content_of_water_vapor",
         units="kg m-2",
+    ),
+    "air_temperature_in": MetaData(
+        long_name="Input temperature profile from ",
+        standard_name="air_temperature",
+        units="K",
+    ),
+    "air_pressure_in": MetaData(
+        long_name="Input pressure profile from ",
+        standard_name="air_pressure",
+        units="Pa",
+    ),
+    "absolute_humidity_in": MetaData(
+        long_name="Input absolute humidity profile from ",
+        units="kg m-3",
     ),
 }

@@ -194,14 +194,14 @@ def read_bandwidth_coefficients() -> dict:
         1, np.int32
     )
     for ff in range(7):
-        ifr = np.where(coeff_bdw["bdw_fre"][ff, :] >= 0.0)[0]
+        ifr = np.where(coeff_bdw["bdw_wgh"][ff, :] > 0.0)[0]
         coeff_bdw["f_all"] = np.hstack(
             (coeff_bdw["f_all"], coeff_bdw["bdw_fre"][ff, ifr])
         )
         coeff_bdw["ind1"] = np.hstack(
             (
                 coeff_bdw["ind1"],
-                coeff_bdw["ind1"][len(coeff_bdw["ind1"]) - 1] + len(ifr),
+                coeff_bdw["ind1"][ff] + len(ifr),
             )
         )
 
@@ -303,4 +303,4 @@ def GAUSS(ape_ang, theta):
     arg = np.abs((ape_ang - theta) / ape_sigma)
     arg = arg[arg < 9.0]
 
-    return np.exp(-arg * arg / 2) * arg
+    return np.exp(-arg * arg / 2.0) * arg
