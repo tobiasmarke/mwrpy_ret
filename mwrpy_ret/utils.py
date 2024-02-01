@@ -65,8 +65,8 @@ def _get_filename(
     source: str, start: datetime.date, stop: datetime.date, site: str
 ) -> str:
     params = read_config(site, "params")
-    if source == "standard_atmosphere":
-        filename = f"{site}_{source}.nc"
+    if site == "standard_atmosphere":
+        filename = f"{site}.nc"
     else:
         filename = (
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
@@ -194,14 +194,14 @@ def read_bandwidth_coefficients() -> dict:
         1, np.int32
     )
     for ff in range(7):
-        ifr = np.where(coeff_bdw["bdw_fre"][ff, :] >= 0.0)[0]
+        ifr = np.where(coeff_bdw["bdw_wgh"][ff, :] > 0.0)[0]
         coeff_bdw["f_all"] = np.hstack(
             (coeff_bdw["f_all"], coeff_bdw["bdw_fre"][ff, ifr])
         )
         coeff_bdw["ind1"] = np.hstack(
             (
                 coeff_bdw["ind1"],
-                coeff_bdw["ind1"][len(coeff_bdw["ind1"]) - 1] + len(ifr),
+                coeff_bdw["ind1"][ff] + len(ifr),
             )
         )
 
@@ -286,9 +286,16 @@ def dcerror(x, y):
         ) * ZH + b[0]
         w = ASUM / BSUM
         w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
-        DCERROR = w
-        DCERROR[y < 0] = w2[y < 0]
-        return DCERROR
+        if hasattr(y, "__len__"):
+            DCERROR = w
+            DCERROR[y < 0] = w2[y < 0]
+        else:
+            if y >= 0.0:
+                DCERROR = w
+            else:
+                DCERROR = w2
+
+    return DCERROR
 
 
 def GAUSS(ape_ang, theta):
@@ -296,4 +303,4 @@ def GAUSS(ape_ang, theta):
     arg = np.abs((ape_ang - theta) / ape_sigma)
     arg = arg[arg < 9.0]
 
-    return np.exp(-arg * arg / 2) * arg
+    return np.exp(-arg * arg / 2.0) * arg

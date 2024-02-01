@@ -1,7 +1,7 @@
 # Config file
 
 params:
-  elevation_angle: [90., 30.]
+  elevation_angle: [90.]
 
   frequency:
     [

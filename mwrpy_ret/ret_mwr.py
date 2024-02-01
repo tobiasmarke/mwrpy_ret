@@ -101,6 +101,7 @@ def save_rpg(ret: Ret, output_file: str, att: dict, source: str) -> None:
         "time": len(ret.data["time"].data),
         "frequency": len(ret.data["frequency"].data),
         "height": len(ret.data["height"].data),
+        "height_in": len(ret.data["height_in"].data),
         "elevation_angle": len(ret.data["elevation_angle"].data),
     }
 
@@ -150,10 +151,16 @@ def _write_vars2nc(nc_file: netCDF4.Dataset, mwr_variables: dict) -> None:
             fill_value = -99
 
         size = obj.dimensions or _get_dimensions(nc_file, obj.data)
-        if obj.name == "tb":
+        if obj.name in ("tb", "tb_pro"):
             size = ("time", "frequency", "elevation_angle")
         if obj.name in ("air_temperature", "absolute_humidity", "air_pressure"):
             size = ("time", "height")
+        if obj.name in (
+            "air_temperature_in",
+            "absolute_humidity_in",
+            "air_pressure_in",
+        ):
+            size = ("time", "height_in")
         nc_variable = nc_file.createVariable(
             obj.name, obj.data_type, size, zlib=True, fill_value=fill_value
         )

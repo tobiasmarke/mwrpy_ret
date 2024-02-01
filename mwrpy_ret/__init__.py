@@ -1,2 +1,2 @@
-from .rad_trans.nonScatMWRadTran import STP_IM10
+from .rad_trans.rad_trans_mw import calc_mw_rt
 from .version import __version__

@@ -1,3 +1,15 @@
+## 0.6.0 – 2024-02-01
+
+- Merge pull request #5 from tobiasmarke/dev_local
+- Separate absorption + optional corrections
+- Refactor Rosenkranz 2023
+- Rosenkranz 2023 water vapor absorption
+- Rosenkranz 2023 oxygen absorption
+- Fix height
+- Improvements for standard atmosphere
+- Fix cloud properties
+- Output for prognostic liquid water profile
+
 ## 0.5.2 – 2023-12-15
 
 - Refactor paths

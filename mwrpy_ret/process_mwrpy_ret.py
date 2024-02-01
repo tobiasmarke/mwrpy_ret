@@ -7,7 +7,7 @@ import numpy as np
 
 from mwrpy_ret import ret_mwr
 from mwrpy_ret.era5_download.get_era5 import era5_request
-from mwrpy_ret.rad_trans.prepare_input import (
+from mwrpy_ret.prepare_input import (
     prepare_era5,
     prepare_ifs,
     prepare_radiosonde,
@@ -59,6 +59,8 @@ def process_input(
     params: dict,
 ) -> dict:
     data_nc: dict = {}
+    if site == "standard_atmosphere":
+        source = "standard_atmosphere"
     if source == "ifs":
         for date in date_range(start_date, stop_date):
             data_in = str(
@@ -76,7 +78,7 @@ def process_input(
                     date_i = datetime.datetime.combine(
                         date, datetime.time(int(hour))
                     ).strftime("%Y%m%d%H")
-                    input_ifs = prepare_ifs(ifs_data, index, date_i, site)
+                    input_ifs = prepare_ifs(ifs_data, index, date_i)
                     try:
                         output_hour = call_rad_trans(input_ifs, params)
                     except ValueError:
@@ -104,7 +106,7 @@ def process_input(
             for file in file_names:
                 output_hour = None
                 with nc.Dataset(file) as rs_data:
-                    input_rs = prepare_radiosonde(rs_data, site)
+                    input_rs = prepare_radiosonde(rs_data)
                 try:
                     output_hour = call_rad_trans(input_rs, params)
                 except ValueError:
@@ -136,7 +138,7 @@ def process_input(
             for index, hour in enumerate(era5_data["time"]):
                 date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
                 output_hour = None
-                input_era5 = prepare_era5(era5_data, index, date_i, site)
+                input_era5 = prepare_era5(era5_data, index, date_i)
                 try:
                     output_hour = call_rad_trans(input_era5, params)
                 except ValueError:
@@ -159,10 +161,11 @@ def process_input(
             )
         )
         with nc.Dataset(data_in) as sa_data:
-            input_sa = prepare_standard_atmosphere(sa_data, site)
+            input_sa = prepare_standard_atmosphere(sa_data)
             data_nc = call_rad_trans(input_sa, params)
 
     data_nc["height"] = np.array(params["height"]) + params["altitude"]
+    data_nc["height_in"] = data_nc["height_in"][0, :]
     data_nc["frequency"] = np.array(params["frequency"])
     data_nc["elevation_angle"] = np.array(params["elevation_angle"])
     return data_nc
