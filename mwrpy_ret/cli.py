@@ -21,7 +21,7 @@ def _parse_args(args):
         "command",
         nargs="?",
         choices=["ifs", "radiosonde", "era5", "get_era5", "standard_atmosphere"],
-        default="ifs",
+        default="standard_atmosphere",
         help="Command to execute.",
     )
     group = parser.add_argument_group(title="General options")
