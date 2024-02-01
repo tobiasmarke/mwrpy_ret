@@ -7,7 +7,7 @@ import numpy as np
 
 from mwrpy_ret import ret_mwr
 from mwrpy_ret.era5_download.get_era5 import era5_request
-from mwrpy_ret.rad_trans.prepare_input import (
+from mwrpy_ret.prepare_input import (
     prepare_era5,
     prepare_ifs,
     prepare_radiosonde,

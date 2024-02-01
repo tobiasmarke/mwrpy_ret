@@ -8,7 +8,7 @@ from mwrpy_ret.atmos import (
     hum_to_iwv,
     interp_log_p,
 )
-from mwrpy_ret.rad_trans import RT_RK
+from mwrpy_ret.rad_trans import calc_mw_rt
 
 
 def rad_trans(
@@ -68,7 +68,7 @@ def rad_trans(
             abshum_new = input_dat["absolute_humidity"][:]
 
         # Radiative transport
-        tb[0, :, 0], tau_k, tau_v = RT_RK(
+        tb[0, :, 0], tau_k, tau_v = calc_mw_rt(
             height_new,
             temperature_new,
             pressure_new,
@@ -81,7 +81,7 @@ def rad_trans(
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _ = RT_RK(
+                tb[0, :, i_ang + 1], _, _ = calc_mw_rt(
                     height_new,
                     temperature_new,
                     pressure_new,

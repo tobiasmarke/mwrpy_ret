@@ -1,1 +1,1 @@
-from .rad_trans_rk import RT_RK
+from .rad_trans_mw import calc_mw_rt

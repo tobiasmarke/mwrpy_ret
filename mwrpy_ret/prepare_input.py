@@ -26,13 +26,13 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
     input_sa: dict = dict(
-        height=sa_data.variables["height"][:] * 1000.0,
-        air_temperature=sa_data.variables["t_atmo"][:, 0],
-        air_pressure=sa_data.variables["p_atmo"][:, 0] * 100.0,
-        absolute_humidity=sa_data.variables["a_atmo"][:, 0],
+        height=sa_data.variables["height"][:27] * 1000.0,
+        air_temperature=sa_data.variables["t_atmo"][:27, 0],
+        air_pressure=sa_data.variables["p_atmo"][:27, 0] * 100.0,
+        absolute_humidity=sa_data.variables["a_atmo"][:27, 0],
     )
     input_sa["relative_humidity"] = q2rh(
-        sa_data.variables["q_atmo"][:, 0],
+        sa_data.variables["q_atmo"][:27, 0],
         input_sa["air_temperature"],
         input_sa["air_pressure"],
     )
