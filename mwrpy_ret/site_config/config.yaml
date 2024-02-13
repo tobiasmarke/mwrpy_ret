@@ -78,3 +78,5 @@ params:
 
 global_specs:
   title:
+  model: R22
+  corr: Without bandwidth and beamwidth correction

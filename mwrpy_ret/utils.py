@@ -288,7 +288,7 @@ def dcerror(x, y):
         w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
         if hasattr(y, "__len__"):
             DCERROR = w
-            DCERROR[y < 0] = w2[y < 0]
+            DCERROR[y < 0.0] = w2[y < 0.0]
         else:
             if y >= 0.0:
                 DCERROR = w

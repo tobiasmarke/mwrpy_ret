@@ -13,14 +13,13 @@ from mwrpy_ret.rad_trans import calc_mw_rt
 
 def rad_trans(
     input_dat: dict,
-    height_int: np.ndarray,
-    freq: np.ndarray,
-    theta: np.ndarray,
+    params: dict,
     coeff_bdw: dict,
     ape_ang: np.ndarray,
 ) -> dict:
-    tb = np.ones((1, len(freq), len(theta)), np.float32) * -999.0
-    tb_pro = np.ones((1, len(freq), len(theta)), np.float32) * -999.0
+    theta = 90.0 - np.array(params["elevation_angle"])
+    tb = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
+    tb_pro = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
     lwp, lwp_pro = -999.0, -999.0
 
     # Integrated water vapor [kg/m²]
@@ -75,7 +74,7 @@ def rad_trans(
             abshum_new,
             lwc_new,
             theta[0],
-            freq,
+            np.array(params["frequency"]),
             coeff_bdw,
             ape_ang,
         )
@@ -88,7 +87,7 @@ def rad_trans(
                     abshum_new,
                     lwc_new,
                     theta[i_ang + 1],
-                    freq,
+                    np.array(params["frequency"]),
                     coeff_bdw,
                     ape_ang,
                     tau_k,
@@ -99,17 +98,17 @@ def rad_trans(
 
     # Interpolate to final grid
     pressure_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["air_pressure"][:],
     )
     temperature_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["air_temperature"][:],
     )
     abshum_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["absolute_humidity"][:],
     )

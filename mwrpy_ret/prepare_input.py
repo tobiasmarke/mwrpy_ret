@@ -4,7 +4,7 @@ import numpy as np
 from metpy.units import units
 
 import mwrpy_ret.constants as con
-from mwrpy_ret.atmos import era5_geopot, q2rh, q_moist_rho
+from mwrpy_ret.atmos import era5_geopot, moist_rho_rh, q2rh
 from mwrpy_ret.utils import seconds_since_epoch
 
 
@@ -15,9 +15,10 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
         air_pressure=ifs_data["pressure"][index, :],
         relative_humidity=ifs_data["rh"][index, :],
     )
-    input_ifs["lwc"] = ifs_data["ql"][index, :] * (
-        input_ifs["air_pressure"]
-        / (input_ifs["air_temperature"] * q_moist_rho(ifs_data["q"][index, :]))
+    input_ifs["lwc"] = ifs_data["ql"][index, :] * moist_rho_rh(
+        input_ifs["air_pressure"],
+        input_ifs["air_temperature"],
+        input_ifs["relative_humidity"],
     )
     input_ifs["time"] = seconds_since_epoch(date_i)
 
@@ -26,13 +27,13 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
     input_sa: dict = dict(
-        height=sa_data.variables["height"][:27] * 1000.0,
-        air_temperature=sa_data.variables["t_atmo"][:27, 0],
-        air_pressure=sa_data.variables["p_atmo"][:27, 0] * 100.0,
-        absolute_humidity=sa_data.variables["a_atmo"][:27, 0],
+        height=sa_data.variables["height"][:28] * 1000.0,
+        air_temperature=sa_data.variables["t_atmo"][:28, 0],
+        air_pressure=sa_data.variables["p_atmo"][:28, 0] * 100.0,
+        absolute_humidity=sa_data.variables["a_atmo"][:28, 0],
     )
     input_sa["relative_humidity"] = q2rh(
-        sa_data.variables["q_atmo"][:27, 0],
+        sa_data.variables["q_atmo"][:28, 0],
         input_sa["air_temperature"],
         input_sa["air_pressure"],
     )

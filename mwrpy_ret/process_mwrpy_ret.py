@@ -176,12 +176,9 @@ def call_rad_trans(data_in: dict, params: dict) -> dict:
     coeff_bdw = read_bandwidth_coefficients()
     # Antenna beamwidth
     ape_ang = read_beamwidth_coefficients()
-
     data_nc = rad_trans(
         data_in,
-        np.array(params["height"]) + params["altitude"],
-        np.array(params["frequency"]),
-        90.0 - np.array(params["elevation_angle"]),
+        params,
         coeff_bdw,
         ape_ang,
     )
