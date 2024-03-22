@@ -1,3 +1,8 @@
+## 0.6.1 – 2024-03-22
+
+- Add options for processing and update h2o coefficients
+- Review clear sky radiative transfer
+
 ## 0.6.0 – 2024-02-01
 
 - Merge pull request #5 from tobiasmarke/dev_local
