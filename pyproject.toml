@@ -45,6 +45,7 @@ max-line-length = 88
 ignored-modules = ["cdsapi", "metpy", "netCDF4", "numba", "numpy", "xarray"]
 disable = [
   "duplicate-code",
+  "eval-used",
   "fixme",
   "invalid-name",
   "logging-fstring-interpolation",

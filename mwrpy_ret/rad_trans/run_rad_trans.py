@@ -13,14 +13,14 @@ from mwrpy_ret.rad_trans import calc_mw_rt
 
 def rad_trans(
     input_dat: dict,
-    height_int: np.ndarray,
-    freq: np.ndarray,
-    theta: np.ndarray,
+    params: dict,
     coeff_bdw: dict,
     ape_ang: np.ndarray,
 ) -> dict:
-    tb = np.ones((1, len(freq), len(theta)), np.float32) * -999.0
-    tb_pro = np.ones((1, len(freq), len(theta)), np.float32) * -999.0
+    theta = 90.0 - np.array(params["elevation_angle"])
+    tb = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
+    tb_pro = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
+    tb_tmp = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
     lwp, lwp_pro = -999.0, -999.0
 
     # Integrated water vapor [kg/m²]
@@ -28,10 +28,13 @@ def rad_trans(
         input_dat["absolute_humidity"] = abs_hum(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
-    iwv = hum_to_iwv(
-        input_dat["absolute_humidity"][:],
-        input_dat["height"][:],
-    )
+    if np.any(input_dat["absolute_humidity"].mask):
+        iwv = -999.0
+    else:
+        iwv = hum_to_iwv(
+            input_dat["absolute_humidity"][:],
+            input_dat["height"][:],
+        )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
     cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else "detected"
@@ -46,7 +49,7 @@ def rad_trans(
                 input_dat["air_pressure"][:],
             )
         if len(top) in np.linspace(1, 15, 15):
-            height_new, lwc_new, lwp = get_cloud_prop(
+            height_new, lwc_new, lwp_tmp = get_cloud_prop(
                 base, top, input_dat["height"][:], input_dat, method
             )
             # Interpolate to new grid
@@ -61,55 +64,57 @@ def rad_trans(
             )
         else:
             height_new = input_dat["height"][:]
-            lwc_new = np.zeros(len(height_new) - 1, np.float32)
-            lwp = 0.0
+            lwc_new = np.zeros(len(height_new), np.float32)
+            lwp_tmp = 0.0
             temperature_new = input_dat["air_temperature"][:]
             pressure_new = input_dat["air_pressure"][:]
             abshum_new = input_dat["absolute_humidity"][:]
 
         # Radiative transport
-        tb[0, :, 0], tau_k, tau_v = calc_mw_rt(
+        tb_tmp[0, :, 0], tau_k, tau_v = calc_mw_rt(
             height_new,
             temperature_new,
             pressure_new,
             abshum_new,
             lwc_new,
             theta[0],
-            freq,
+            np.array(params["frequency"]),
             coeff_bdw,
             ape_ang,
         )
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
-                tb[0, :, i_ang + 1], _, _ = calc_mw_rt(
+                tb_tmp[0, :, i_ang + 1], _, _ = calc_mw_rt(
                     height_new,
                     temperature_new,
                     pressure_new,
                     abshum_new,
                     lwc_new,
                     theta[i_ang + 1],
-                    freq,
+                    np.array(params["frequency"]),
                     coeff_bdw,
                     ape_ang,
                     tau_k,
                     tau_v,
                 )
         if method == "prognostic":
-            lwp_pro, tb_pro = lwp, tb
+            lwp_pro, tb_pro = np.copy(lwp_tmp), np.copy(tb_tmp)
+        else:
+            lwp, tb = np.copy(lwp_tmp), np.copy(tb_tmp)
 
     # Interpolate to final grid
     pressure_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["air_pressure"][:],
     )
     temperature_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["air_temperature"][:],
     )
     abshum_int = np.interp(
-        height_int,
+        params["height"],
         input_dat["height"][:] - input_dat["height"][0],
         input_dat["absolute_humidity"][:],
     )
