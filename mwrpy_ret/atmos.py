@@ -83,17 +83,6 @@ def moist_rho_rh(p, T, rh):
     return p / (con.RS * T * (1 + (con.RW / con.RS - 1) * q))
 
 
-def q_moist_rho(q):
-    """
-    Input q is in kg/kg
-
-    Output:
-    density of moist air [kg/m^3]
-    """
-
-    return con.RS * (1 + ((1 - con.MW_RATIO) / con.MW_RATIO) * q)
-
-
 def hum_to_iwv(ahum, height):
     """
     Calculate the integrated water vapour
@@ -167,7 +156,7 @@ def detect_cloud_mod(z, lwc):
             np.hstack((i_cloud[0], i_cloud[np.diff(np.hstack((0, i_cloud))) > 1]))
         )
         i_top = np.hstack(
-            (i_cloud[np.diff(np.hstack((i_cloud, 0))) > 1] - 1, i_cloud[-1])
+            (i_cloud[np.diff(np.hstack((i_cloud, i_cloud[-1]))) > 1], i_cloud[-1])
         )
 
         if len(i_top) != len(i_base):
@@ -297,50 +286,52 @@ def get_cloud_prop(
         np.empty(0, np.float64),
     )
 
-    for icl, _ in enumerate(top):
-        xcl = np.where(
-            (input_dat["height"][:] >= base[icl]) & (input_dat["height"][:] <= top[icl])
-        )[0]
-        if len(xcl) > 1:
-            if method == "prognostic":
-                lwcx, cloudx = input_dat["lwc"][xcl], input_dat["height"][xcl]
-                lwp = lwp + np.sum(
-                    (lwcx[1:] + lwcx[:-1]) / 2.0 * np.diff(input_dat["height"][xcl])
-                )
-            else:
+    if method == "prognostic":
+        lwc_new, height_new = input_dat["lwc"][:], input_dat["height"][:]
+        lwp = lwp + np.sum(
+            (input_dat["lwc"][1:] + input_dat["lwc"][:-1])
+            / 2.0
+            * np.diff(input_dat["height"][:])
+        )
+    else:
+        for icl, _ in enumerate(top):
+            xcl = np.where(
+                (input_dat["height"][:] >= base[icl] - 0.01)
+                & (input_dat["height"][:] <= top[icl] + 0.01)
+            )[0]
+            if len(xcl) > 1:
                 lwcx, cloudx = mod_ad(
                     input_dat["air_temperature"][xcl],
                     input_dat["air_pressure"][xcl],
                     input_dat["height"][xcl],
                 )
                 lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
+                cloud_new = np.hstack((cloud_new, cloudx))
+                lwc = np.hstack((lwc, lwcx))
 
-            cloud_new = np.hstack((cloud_new, cloudx))
-            lwc = np.hstack((lwc, lwcx))
-
-            if len(height_new) == 0:
-                height_new = height_int[height_int < base[0]]
-            else:
-                height_new = np.hstack(
-                    (
-                        height_new,
-                        height_int[
-                            (height_int > top[icl - 1]) & (height_int < base[icl])
-                        ],
+                if len(height_new) == 0:
+                    height_new = height_int[height_int < base[0]]
+                else:
+                    height_new = np.hstack(
+                        (
+                            height_new,
+                            height_int[
+                                (height_int > top[icl - 1]) & (height_int < base[icl])
+                            ],
+                        )
                     )
-                )
 
-            # New vertical grid
-            height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
-            height_new = np.sort(np.hstack((height_new, cloud_new)))
+        # New vertical grid
+        height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
+        height_new = np.sort(np.hstack((height_new, cloud_new)))
 
-            # Distribute liquid water
-            lwc_new = np.zeros(len(height_new) - 1, np.float32)
-            if len(lwc) > 0:
-                _, xx, yy = np.intersect1d(
-                    height_new, cloud_new, assume_unique=False, return_indices=True
-                )
-                lwc_new[xx] = lwc[yy]
+        # Distribute liquid water
+        lwc_new = np.zeros(len(height_new) - 1, np.float32)
+        if len(lwc) > 0:
+            _, xx, yy = np.intersect1d(
+                height_new, cloud_new, assume_unique=False, return_indices=True
+            )
+            lwc_new[xx] = lwc[yy]
 
     return height_new, lwc_new, lwp
 

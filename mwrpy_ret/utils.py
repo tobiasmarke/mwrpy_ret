@@ -72,11 +72,7 @@ def _get_filename(
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
         )
 
-    return str(
-        os.path.join(
-            os.path.dirname(os.path.dirname(__file__)) + params["data_out"] + filename
-        )
-    )
+    return str(os.path.join(params["data_out"] + filename))
 
 
 def isodate2date(date_str: str) -> datetime.date:
@@ -288,7 +284,7 @@ def dcerror(x, y):
         w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
         if hasattr(y, "__len__"):
             DCERROR = w
-            DCERROR[y < 0] = w2[y < 0]
+            DCERROR[y < 0.0] = w2[y < 0.0]
         else:
             if y >= 0.0:
                 DCERROR = w
