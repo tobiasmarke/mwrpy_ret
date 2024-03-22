@@ -24,6 +24,17 @@ def calc_mw_rt(
     non-scattering microwave radiative transfer
     """
     config = read_config(None, "global_specs")
+    if (
+        config["cloud"].split()[-1] == "excluded"
+        and np.sum((LWC[1:] + LWC[:-1] / 2.0 * np.diff(z_final))) > 0.001
+        or len(z_final) != 107
+        or np.any(np.ma.array(T_final).mask)
+    ):
+        return (
+            np.ones(len(f), np.float32) * -999.0,
+            np.ones(len(f), np.float32) * -999.0,
+            np.ones(len(f), np.float32) * -999.0,
+        )
     if config["corr"].split()[0] == "Without":
         # Calculate optical thickness
         if tau_k is None:

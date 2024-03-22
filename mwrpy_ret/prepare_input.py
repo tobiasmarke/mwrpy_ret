@@ -10,12 +10,12 @@ from mwrpy_ret.utils import seconds_since_epoch
 
 def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
     input_ifs: dict = dict(
-        height=ifs_data["height"][index, :],
-        air_temperature=ifs_data["temperature"][index, :],
-        air_pressure=ifs_data["pressure"][index, :],
-        relative_humidity=ifs_data["rh"][index, :],
+        height=ifs_data["height"][index, :107],
+        air_temperature=ifs_data["temperature"][index, :107],
+        air_pressure=ifs_data["pressure"][index, :107],
+        relative_humidity=ifs_data["rh"][index, :107],
     )
-    input_ifs["lwc"] = ifs_data["ql"][index, :] * moist_rho_rh(
+    input_ifs["lwc"] = ifs_data["ql"][index, :107] * moist_rho_rh(
         input_ifs["air_pressure"],
         input_ifs["air_temperature"],
         input_ifs["relative_humidity"],
@@ -27,13 +27,13 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
     input_sa: dict = dict(
-        height=sa_data.variables["height"][:28] * 1000.0,
-        air_temperature=sa_data.variables["t_atmo"][:28, 0],
-        air_pressure=sa_data.variables["p_atmo"][:28, 0] * 100.0,
-        absolute_humidity=sa_data.variables["a_atmo"][:28, 0],
+        height=sa_data.variables["height"][:27] * 1000.0,
+        air_temperature=sa_data.variables["t_atmo"][:27, 0],
+        air_pressure=sa_data.variables["p_atmo"][:27, 0] * 100.0,
+        absolute_humidity=sa_data.variables["a_atmo"][:27, 0],
     )
     input_sa["relative_humidity"] = q2rh(
-        sa_data.variables["q_atmo"][:28, 0],
+        sa_data.variables["q_atmo"][:27, 0],
         input_sa["air_temperature"],
         input_sa["air_pressure"],
     )
@@ -70,19 +70,19 @@ def prepare_era5(mod_data: dict, index: int, date_i: str) -> dict:
     )
     geopotential = units.Quantity(geopotential, "m^2/s^2")
     input_era5["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
-    input_era5["height"] = input_era5["height"][:]
-    input_era5["air_pressure"] = input_era5["air_pressure"][:]
+    input_era5["height"] = input_era5["height"][:107]
+    input_era5["air_pressure"] = input_era5["air_pressure"][:107]
     input_era5["air_temperature"] = np.flip(
-        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
+        np.mean(mod_data["t"][index, :, :, :107], axis=(1, 2))
     )
     input_era5[
         "relative_humidity"
     ] = metpy.calc.relative_humidity_from_specific_humidity(
         input_era5["air_pressure"] * units.Pa,
         units.Quantity(input_era5["air_temperature"], "K"),
-        np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2))),
+        np.flip(np.mean(mod_data["q"][index, :, :, :107], axis=(1, 2))),
     ).magnitude
-    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2)))
+    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :107], axis=(1, 2)))
     mxr = metpy.calc.mixing_ratio_from_relative_humidity(
         units.Quantity(input_era5["air_pressure"], "Pa"),
         units.Quantity(input_era5["air_temperature"], "K"),

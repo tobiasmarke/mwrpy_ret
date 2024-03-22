@@ -63,45 +63,35 @@ def process_input(
         source = "standard_atmosphere"
     if source == "ifs":
         for date in date_range(start_date, stop_date):
-            data_in = str(
-                os.path.join(
-                    os.path.dirname(os.path.dirname(__file__))
-                    + params["data_ifs"]
-                    + date.strftime("%Y/")
-                    + date.strftime("%Y%m%d")
-                )
+            data_in = (
+                params["data_ifs"] + date.strftime("%Y/") + date.strftime("%Y%m%d")
             )
             file_name = get_file_list(data_in, "ecmwf")
-            with nc.Dataset(file_name[0]) as ifs_data:
-                for index, hour in enumerate(ifs_data["time"][:-1]):
-                    output_hour = None
-                    date_i = datetime.datetime.combine(
-                        date, datetime.time(int(hour))
-                    ).strftime("%Y%m%d%H")
-                    input_ifs = prepare_ifs(ifs_data, index, date_i)
-                    try:
-                        output_hour = call_rad_trans(input_ifs, params)
-                    except ValueError:
-                        logging.info(f"Skipping time {date_i}")
-                    if output_hour is not None:
-                        if date_i[-2:] == "00":
-                            logging.info(
-                                f"Radiative transfer using {source} data "
-                                f"for {site}, {date_i[:-2]}"
-                            )
-                        for key, array in output_hour.items():
-                            data_nc = append_data(data_nc, key, array)
+            if len(file_name) > 0:
+                with nc.Dataset(file_name[0]) as ifs_data:
+                    for index, hour in enumerate(ifs_data["time"][:-1]):
+                        output_hour = None
+                        date_i = datetime.datetime.combine(
+                            date, datetime.time(int(hour))
+                        ).strftime("%Y%m%d%H")
+                        input_ifs = prepare_ifs(ifs_data, index, date_i)
+                        try:
+                            output_hour = call_rad_trans(input_ifs, params)
+                        except ValueError:
+                            logging.info(f"Skipping time {date_i}")
+                        if output_hour is not None:
+                            if date_i[-2:] == "00":
+                                logging.info(
+                                    f"Radiative transfer using {source} data "
+                                    f"for {site}, {date_i[:-2]}"
+                                )
+                            for key, array in output_hour.items():
+                                data_nc = append_data(data_nc, key, array)
 
     elif source == "radiosonde":
         for date in date_range(start_date, stop_date):
             output_day: dict = {}
-            data_in = str(
-                os.path.join(
-                    os.path.dirname(os.path.dirname(__file__))
-                    + params["data_rs"]
-                    + date.strftime("%Y/%m/%d/")
-                )
-            )
+            data_in = params["data_rs"] + date.strftime("%Y/%m/%d/")
             file_names = get_file_list(data_in, "radiosonde")
             for file in file_names:
                 output_hour = None
@@ -122,17 +112,14 @@ def process_input(
                     data_nc = append_data(data_nc, key, array)
 
     elif source == "era5":
-        file_name = str(
-            os.path.join(
-                os.path.dirname(os.path.dirname(__file__))
-                + params["data_era5"]
-                + site
-                + "_era5_input_"
-                + start_date.strftime("%Y%m%d")
-                + "_"
-                + stop_date.strftime("%Y%m%d")
-                + ".nc"
-            )
+        file_name = (
+            params["data_era5"]
+            + site
+            + "_era5_input_"
+            + start_date.strftime("%Y%m%d")
+            + "_"
+            + stop_date.strftime("%Y%m%d")
+            + ".nc"
         )
         with nc.Dataset(file_name) as era5_data:
             for index, hour in enumerate(era5_data["time"]):
@@ -153,21 +140,18 @@ def process_input(
                         data_nc = append_data(data_nc, key, array)
 
     elif source == "standard_atmosphere":
-        data_in = str(
-            os.path.join(
-                os.path.dirname(os.path.dirname(__file__))
-                + params["data_std"]
-                + "standard_atmospheres.nc"
-            )
-        )
+        data_in = params["data_std"] + "standard_atmospheres.nc"
         with nc.Dataset(data_in) as sa_data:
             input_sa = prepare_standard_atmosphere(sa_data)
             data_nc = call_rad_trans(input_sa, params)
 
     data_nc["height"] = np.array(params["height"]) + params["altitude"]
-    data_nc["height_in"] = data_nc["height_in"][0, :]
     data_nc["frequency"] = np.array(params["frequency"])
     data_nc["elevation_angle"] = np.array(params["elevation_angle"])
+    if "height_in" in data_nc:
+        data_nc["height_in"] = data_nc["height_in"][0, :]
+    else:
+        data_nc = {}
     return data_nc
 
 

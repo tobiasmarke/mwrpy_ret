@@ -72,11 +72,7 @@ def _get_filename(
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"
         )
 
-    return str(
-        os.path.join(
-            os.path.dirname(os.path.dirname(__file__)) + params["data_out"] + filename
-        )
-    )
+    return str(os.path.join(params["data_out"] + filename))
 
 
 def isodate2date(date_str: str) -> datetime.date:

@@ -28,8 +28,18 @@ def ABWV_R22(
 
     path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r22/h2o_list.json"
     CF = loadCoeffsJSON(path)
+    CF["W0"] = CF["Wair"] / 1000.0
+    CF["W0S"] = CF["Wself"] / 1000.0
+    CF["SH"] = CF["Sair"] / 1000.0
+    CF["SHS"] = CF["Sself"] / 1000.0
+    CF["W2"] = CF["W2air"] / 1000.0
+    CF["W2S"] = CF["W2self"] / 1000.0
+    CF["D2"] = CF["D2air"] / 1000.0
+    CF["D2S"] = CF["D2self"] / 1000.0
     CF["XW2"][CF["XW2"] <= 0.0] = CF["X"][CF["XW2"] <= 0.0]
     CF["XW2S"][CF["XW2S"] <= 0.0] = CF["XS"][CF["XW2S"] <= 0.0]
+    CF["XH"][CF["XH"] <= 0.0] = CF["X"][CF["XH"] <= 0.0]
+    CF["XHS"][CF["XHS"] <= 0.0] = CF["XS"][CF["XHS"] <= 0.0]
 
     PVAP = RHO * T * 4.615228e-3
     PDA = P - PVAP
@@ -47,28 +57,22 @@ def ABWV_R22(
     # ****ADD RESONANCES
     SUM = np.zeros(n_f, np.float32)
     for I, FL in enumerate(CF["FL"]):
-        WIDTH0 = (CF["W0"][I] / 1000.0) * PDA * TI ** CF["X"][I] + (
-            CF["W0S"][I] / 1000.0
-        ) * PVAP * TI ** CF["XS"][I]
-        if CF["W2"][I] > 0.0:
-            WIDTH2 = (CF["W2"][I] / 1000.0) * PDA * TI ** CF["XW2"][I] + (
-                CF["W2S"][I] / 1000.0
-            ) * PVAP * TI ** CF["XW2S"][I]
-        else:
-            WIDTH2 = 0  # SUM = 0
-
-        DELTA2 = (CF["D2"][I] / 1000.0) * PDA + (CF["D2S"][I] / 1000.0) * PVAP
-        SHIFTF = (
-            (CF["SH"][I] / 1000.0)
-            * PDA
-            * (1.0 - CF["AAIR"][I] * TILN)
-            * TI ** CF["XH"][I]
+        WIDTH0 = (
+            CF["W0"][I] * PDA * TI ** CF["X"][I]
+            + CF["W0S"][I] * PVAP * TI ** CF["XS"][I]
         )
+        if CF["W2"][I] > 0.0:
+            WIDTH2 = (
+                CF["W2"][I] * PDA * TI ** CF["XW2"][I]
+                + CF["W2S"][I] * PVAP * TI ** CF["XW2S"][I]
+            )
+        else:
+            WIDTH2 = 0.0  # SUM = 0
+
+        DELTA2 = CF["D2"][I] * PDA + CF["D2S"][I] * PVAP
+        SHIFTF = CF["SH"][I] * PDA * (1.0 - CF["AAIR"][I] * TILN) * TI ** CF["XH"][I]
         SHIFTS = (
-            (CF["SHS"][I] / 1000.0)
-            * PVAP
-            * (1.0 - CF["ASELF"][I] * TILN)
-            * TI ** CF["XHS"][I]
+            CF["SHS"][I] * PVAP * (1.0 - CF["ASELF"][I] * TILN) * TI ** CF["XHS"][I]
         )
         SHIFT = SHIFTF + SHIFTS
         WSQ = WIDTH0**2
