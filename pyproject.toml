@@ -20,13 +20,14 @@ dependencies = [
   "netCDF4",
   "numba",
   "pandas",
+  "pysonde",
   "pyyaml",
   "xarray",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-test = ["mypy", "pylint", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
+test = ["mypy", "pylint", "pysonde", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
 
 [project.urls]
 Homepage = "https://github.com/tobiasmarke/mwrpy_ret"
@@ -37,12 +38,12 @@ Changelog = "https://github.com/tobiasmarke/mwrpy_ret/blob/main/CHANGELOG.md"
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["cdsapi.*", "matplotlib.*", "metpy.*", "netCDF4.*", "numba.*", "numpy.*", "pandas.*", "xarray.*"]
+module = ["cdsapi.*", "matplotlib.*", "metpy.*", "netCDF4.*", "numba.*", "numpy.*", "pandas.*", "pysonde.*", "xarray.*"]
 ignore_missing_imports = true
 
 [tool.pylint]
 max-line-length = 88
-ignored-modules = ["cdsapi", "metpy", "netCDF4", "numba", "numpy", "xarray"]
+ignored-modules = ["cdsapi", "metpy", "netCDF4", "numba", "numpy", "pysonde", "xarray"]
 disable = [
   "duplicate-code",
   "eval-used",

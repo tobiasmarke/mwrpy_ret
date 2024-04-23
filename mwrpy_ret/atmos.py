@@ -326,7 +326,7 @@ def get_cloud_prop(
         height_new = np.sort(np.hstack((height_new, cloud_new)))
 
         # Distribute liquid water
-        lwc_new = np.zeros(len(height_new) - 1, np.float32)
+        lwc_new = np.zeros(len(height_new), np.float32)
         if len(lwc) > 0:
             _, xx, yy = np.intersect1d(
                 height_new, cloud_new, assume_unique=False, return_indices=True
