@@ -1,3 +1,11 @@
+## 0.6.3 – 2024-04-23
+
+- Refactor Vaisala config
+
+## 0.6.2 – 2024-04-23
+
+- Include Vaisala radiosondes and pysonde support
+
 ## 0.6.1 – 2024-03-22
 
 - Add options for processing and update h2o coefficients

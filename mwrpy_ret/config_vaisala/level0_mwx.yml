@@ -1,0 +1,48 @@
+sync_sounding_items:
+  - SoundingIdPk
+  - RadioRxTimePk
+  - DataSrvTime
+  - Pressure
+  - Temperature
+  - Humidity
+  - WindDir
+  - WindSpeed
+  - WindNorth
+  - WindEast
+  - Height
+  - PtuStatus
+  - WindInterpolated
+  - Latitude
+  - Longitude
+  - North
+  - East
+  - Up
+  - Altitude
+  - Dropping
+radiosondes_sounding_items:
+  - Frequency
+  - SerialNbr
+  - SondeTypeName
+dictionary_input: # variable_name_in_file: variable_name_in_software
+  "Pressure": "pressure"
+  "Temperature": "temperature"
+  "Humidity": "humidity"
+  "WindDir": "wind_direction"
+  "WindSpeed": "wind_speed"
+  "WindNorth": "v"
+  "WindEast": "u"
+  "Height": "height"
+  "PtuStatus": "ptu_status"
+  "WindInterpolated": "wind_interp_flag"
+  "Latitude": "latitude"
+  "Longitude": "longitude"
+  "SerialNbr": "number_of_probe"
+  "Frequency": "sonde_frequency"
+input_units: # data units in radiosonde files (mwx)
+  "pressure": "hPa"
+  "temperature": "K"
+  "humidity": "1"
+  "wind_direction": "degree"
+  "wind_speed": "m/s"
+  "v": "m/s"
+  "u": "m/s"
