@@ -6,3 +6,4 @@ __pycache__
 build
 dist
 tests/data
+tests/radiosonde

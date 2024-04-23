@@ -59,6 +59,21 @@ def prepare_radiosonde(rs_data: nc.Dataset) -> dict:
     return input_rs
 
 
+def prepare_vaisala(vs_data: nc.Dataset) -> dict:
+    input_vs: dict = {}
+    geopotential = units.Quantity(vs_data.variables["alt"][:] * con.g0, "m^2/s^2")
+    input_vs["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
+    input_vs["height"] = input_vs["height"][0, :]
+    input_vs["air_temperature"] = vs_data.variables["ta"][0, :]
+    input_vs["relative_humidity"] = vs_data.variables["rh"][0, :] / 100.0
+    input_vs["air_pressure"] = vs_data.variables["p"][0, :]
+    input_vs["time"] = seconds_since_epoch(
+        vs_data.date_YYYYMMDDTHHMM[0:8] + vs_data.date_YYYYMMDDTHHMM[9:11]
+    )
+
+    return input_vs
+
+
 def prepare_era5(mod_data: dict, index: int, date_i: str) -> dict:
     input_era5: dict = {}
     geopotential, input_era5["air_pressure"] = era5_geopot(
