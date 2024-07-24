@@ -109,7 +109,7 @@ def process_input(
                 logging.info(
                     f"Radiative transfer using {source} data for {site}, {date}"
                 )
-                for key, array in output_day:
+                for key, array in output_day.items():
                     data_nc = append_data(data_nc, key, array)
 
     elif source == "vaisala":

@@ -18,25 +18,30 @@ def abs_hum(T: np.ndarray, rh: np.ndarray) -> np.ndarray:
     return (rh * es) / (con.RW * T)
 
 
+def calc_rho(temperature: np.ndarray, rh: np.ndarray):
+    es = calc_saturation_vapor_pressure(temperature) / 100.0
+    e = np.multiply(rh, es)
+
+    return e / 1000.0
+
+
 def calc_saturation_vapor_pressure(temperature: np.ndarray) -> np.ndarray:
-    """Goff-Gratch formula for saturation vapor pressure (Pa) over water adopted by WMO.
+    """saturation vapor pressure (Pa) over water adapted from pyrtlib.
     Args:
         temperature: Temperature (K).
     Returns:
         Saturation vapor pressure (Pa).
     """
-    ratio = con.T0 / temperature
-    inv_ratio = ratio**-1
-    return (
-        10
-        ** (
-            10.79574 * (1 - ratio)
-            - 5.028 * np.log10(inv_ratio)
-            + 1.50475e-4 * (1 - (10 ** (-8.2969 * (inv_ratio - 1))))
-            + 0.42873e-3 * (10 ** (4.76955 * (1 - ratio)) - 1)
-            + 0.78614
-        )
-    ) * 100.0
+    y = 373.16 / temperature
+    es = (
+        np.dot(-7.90298, (y - 1.0))
+        + np.dot(5.02808, np.log10(y))
+        - np.dot(1.3816e-07, (10 ** (np.dot(11.344, (1.0 - (1.0 / y)))) - 1.0))
+        + np.dot(0.0081328, (10 ** (np.dot(-3.49149, (y - 1.0))) - 1.0))
+        + np.log10(1013.246)
+    )
+
+    return 10.0**es * 100.0
 
 
 def abshum_to_vap(T, p, rho):
@@ -59,10 +64,13 @@ def q2rh(q, T, p):
     rh is in Pa/Pa
     """
 
-    e = p / (con.MW_RATIO * ((1 / q) + (1 / con.MW_RATIO - 1)))
-    eStar = calc_saturation_vapor_pressure(T)
+    esat = calc_saturation_vapor_pressure(T)
 
-    return e / eStar
+    eps = 0.621970585
+    e = np.multiply(p, q) / (np.dot(1000.0, eps) + q)
+    rh = np.dot(100.0, e) / esat
+
+    return rh
 
 
 def moist_rho_rh(p, T, rh):

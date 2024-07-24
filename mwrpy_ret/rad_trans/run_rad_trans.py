@@ -2,6 +2,7 @@ import numpy as np
 
 from mwrpy_ret.atmos import (
     abs_hum,
+    calc_rho,
     detect_cloud_mod,
     detect_liq_cloud,
     get_cloud_prop,
@@ -28,6 +29,7 @@ def rad_trans(
         input_dat["absolute_humidity"] = abs_hum(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
+    e = calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
     if np.any(input_dat["absolute_humidity"].mask):
         iwv = -999.0
     else:
@@ -59,23 +61,21 @@ def rad_trans(
             temperature_new = np.interp(
                 height_new, input_dat["height"][:], input_dat["air_temperature"][:]
             )
-            abshum_new = np.interp(
-                height_new, input_dat["height"][:], input_dat["absolute_humidity"][:]
-            )
+            e_new = np.interp(height_new, input_dat["height"][:], e)
         else:
             height_new = input_dat["height"][:]
             lwc_new = np.zeros(len(height_new), np.float32)
             lwp_tmp = 0.0
             temperature_new = input_dat["air_temperature"][:]
             pressure_new = input_dat["air_pressure"][:]
-            abshum_new = input_dat["absolute_humidity"][:]
+            e_new = e
 
         # Radiative transport
         tb_tmp[0, :, 0], tau_k, tau_v = calc_mw_rt(
             height_new,
             temperature_new,
             pressure_new,
-            abshum_new,
+            e_new,
             lwc_new,
             theta[0],
             np.array(params["frequency"]),
@@ -88,7 +88,7 @@ def rad_trans(
                     height_new,
                     temperature_new,
                     pressure_new,
-                    abshum_new,
+                    e_new,
                     lwc_new,
                     theta[i_ang + 1],
                     np.array(params["frequency"]),
@@ -98,9 +98,9 @@ def rad_trans(
                     tau_v,
                 )
         if method == "prognostic":
-            lwp_pro, tb_pro = np.copy(lwp_tmp), np.copy(tb_tmp)
+            lwp_pro, tb_pro = lwp_tmp, tb_tmp
         else:
-            lwp, tb = np.copy(lwp_tmp), np.copy(tb_tmp)
+            lwp, tb = lwp_tmp, tb_tmp
 
     # Interpolate to final grid
     pressure_int = np.interp(

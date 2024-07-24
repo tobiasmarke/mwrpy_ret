@@ -36,11 +36,13 @@ def ABWV_R22(
     CF["W2S"] = CF["W2self"] / 1000.0
     CF["D2"] = CF["D2air"] / 1000.0
     CF["D2S"] = CF["D2self"] / 1000.0
-    CF["XW2"][CF["XW2"] <= 0.0] = CF["X"][CF["XW2"] <= 0.0]
-    CF["XW2S"][CF["XW2S"] <= 0.0] = CF["XS"][CF["XW2S"] <= 0.0]
-    CF["XH"][CF["XH"] <= 0.0] = CF["X"][CF["XH"] <= 0.0]
-    CF["XHS"][CF["XHS"] <= 0.0] = CF["XS"][CF["XHS"] <= 0.0]
+    # CF["XW2"][CF["XW2"] <= 0.0] = CF["X"][CF["XW2"] <= 0.0]
+    # CF["XW2S"][CF["XW2S"] <= 0.0] = CF["XS"][CF["XW2S"] <= 0.0]
+    # CF["XH"][CF["XH"] <= 0.0] = CF["X"][CF["XH"] <= 0.0]
+    # CF["XHS"][CF["XHS"] <= 0.0] = CF["XS"][CF["XHS"] <= 0.0]
 
+    RVAP = (0.01 * 8.31451) / 18.01528
+    RHO = RHO / (RVAP * T)
     PVAP = RHO * T * 4.615228e-3
     PDA = P - PVAP
     TI = CF["Trefcon"] / T
@@ -55,7 +57,7 @@ def ABWV_R22(
     TI2 = np.exp(2.5 * TILN)
 
     # ****ADD RESONANCES
-    SUM = np.zeros(n_f, np.float32)
+    SUMM = np.zeros(n_f, np.float32)
     for I, FL in enumerate(CF["FL"]):
         WIDTH0 = (
             CF["W0"][I] * PDA * TI ** CF["X"][I]
@@ -87,24 +89,24 @@ def ABWV_R22(
 
         # DO FOR POSITIVE AND NEGATIVE RESONANCES
         RES = np.zeros(n_f, np.float32)
-        for J in range(2):
-            INDEX1 = np.zeros(n_f, dtype=bool)
-            if (J == 0) & (WIDTH2 > 0.0):
-                INDEX1 = np.abs(DF[J, :]) < 10.0 * WIDTH0
-                XC = (WIDTH0 - 1.5 * WIDTH2 + (DF[J, :] + 1.5 * DELTA2) * 1j) / (
-                    WIDTH2 - DELTA2 * 1j
-                )
-                XRT = np.sqrt(XC)
-                PXW = 1.77245385090551603 * XRT * dcerror(-np.imag(XRT), np.real(XRT))
-                SD = 2.0 * (1.0 - PXW) / (WIDTH2 - DELTA2 * 1j)
-                RES[INDEX1] = (RES + np.real(SD) - BASE)[INDEX1]
-            INDEX2 = (np.abs(DF[J, :]) < 750.0) & ~INDEX1
-            if np.any(INDEX2):
-                RES[INDEX2] = (RES + WIDTH0 / (DF[J, :] ** 2 + WSQ) - BASE)[INDEX2]
+        for ifr in range(n_f):
+            for J in range(2):
+                if (J == 0) & (WIDTH2 > 0.0) & (np.abs(DF[J, ifr]) < 10.0 * WIDTH0):
+                    XC = (WIDTH0 - 1.5 * WIDTH2 + (DF[J, ifr] + 1.5 * DELTA2) * 1j) / (
+                        WIDTH2 - DELTA2 * 1j
+                    )
+                    XRT = np.sqrt(XC)
+                    PXW = (
+                        1.77245385090551603 * XRT * dcerror(-np.imag(XRT), np.real(XRT))
+                    )
+                    SD = 2.0 * (1.0 - PXW) / (WIDTH2 - DELTA2 * 1j)
+                    RES[ifr] = RES[ifr] + np.real(SD) - BASE
+                elif np.abs(DF[J, ifr]) < 750.0:
+                    RES[ifr] = RES[ifr] + WIDTH0 / (DF[J, ifr] ** 2 + WSQ) - BASE
 
-        SUM = SUM + S * RES * (F / FL) ** 2.0
+        SUMM += S * RES * (F / FL) ** 2.0
 
-    return 1.0e-10 * RHO * SUM / (np.pi * 2.9915075e-23) + CON
+    return 1.0e-10 * (RHO / 2.9915075e-23) * SUMM / np.pi + CON
 
 
 def ABWV_R23(
@@ -246,6 +248,8 @@ def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
     TH = 300.0 / TEMP
     TH1 = TH - 1.0
     B = TH ** CF["X"]
+    RVAP = (0.01 * 8.314510) / 18.01528
+    VAPDEN = VAPDEN / (RVAP * TEMP)
     PRESWV = VAPDEN * TEMP / 216.68
     PRESDA = PRES - PRESWV
     DEN = 0.001 * (PRESDA * B + 1.2 * PRESWV * TH)
@@ -382,14 +386,6 @@ def ABLIQ_R(LWC, F, T):
     chij = hdelta * np.log10((z - np.conj(z2)) / (z - np.conj(z1))) / np.conj(cnorm)
     dchi = chip + chij - delta
     kappa = kappa + dchi
-
-    # THETA1 = 1.-300./T
-    # EPS0 = 77.66 - 103.3*THETA1
-    # EPS1 = .0671*EPS0
-    # EPS2 = 3.52
-    # FP = 20.1*np.exp(7.88*THETA1)
-    # FS = 39.8*FP
-    # kappa = (EPS0-EPS1)/(1. + F/FP * 1j) + (EPS1-EPS2)/(1. + F/FS * 1j) + EPS2
 
     RE = (kappa - 1.0) / (kappa + 2.0)
 

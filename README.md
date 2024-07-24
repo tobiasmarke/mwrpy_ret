@@ -45,6 +45,7 @@ Commands:
 | :-------------------- | :-------------------------------- |
 | `ifs`                 | Process IFS data (default).       |
 | `radiosonde`          | Process radiosonde data.          |
+| `vaisala`             | Process Vaisala radiosonde data.  |
 | `era5`                | Process ERA5 data.                |
 | `get_era5`            | Download ERA5 data.               |
 | `standard_atmosphere` | Process standard atmosphere data. |

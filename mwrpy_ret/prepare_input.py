@@ -9,13 +9,13 @@ from mwrpy_ret.utils import seconds_since_epoch
 
 
 def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
-    input_ifs: dict = dict(
-        height=ifs_data["height"][index, :107],
-        air_temperature=ifs_data["temperature"][index, :107],
-        air_pressure=ifs_data["pressure"][index, :107],
-        relative_humidity=ifs_data["rh"][index, :107],
-    )
-    input_ifs["lwc"] = ifs_data["ql"][index, :107] * moist_rho_rh(
+    input_ifs = {
+        "height": ifs_data["height"][index, :],
+        "air_temperature": ifs_data["temperature"][index, :],
+        "air_pressure": ifs_data["pressure"][index, :],
+        "relative_humidity": ifs_data["rh"][index, :],
+    }
+    input_ifs["lwc"] = ifs_data["ql"][index, :] * moist_rho_rh(
         input_ifs["air_pressure"],
         input_ifs["air_temperature"],
         input_ifs["relative_humidity"],
@@ -26,16 +26,19 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
-    input_sa: dict = dict(
-        height=sa_data.variables["height"][:27] * 1000.0,
-        air_temperature=sa_data.variables["t_atmo"][:27, 0],
-        air_pressure=sa_data.variables["p_atmo"][:27, 0] * 100.0,
-        absolute_humidity=sa_data.variables["a_atmo"][:27, 0],
-    )
-    input_sa["relative_humidity"] = q2rh(
-        sa_data.variables["q_atmo"][:27, 0],
-        input_sa["air_temperature"],
-        input_sa["air_pressure"],
+    input_sa = {
+        "height": sa_data.variables["height"][:] * 1000.0,
+        "air_temperature": sa_data.variables["t_atmo"][:, 0],
+        "air_pressure": sa_data.variables["p_atmo"][:, 0] * 100.0,
+        "absolute_humidity": sa_data.variables["a_atmo"][:, 0],
+    }
+    input_sa["relative_humidity"] = (
+        q2rh(
+            sa_data.variables["q_atmo"][:, 0] * 1000.0,
+            input_sa["air_temperature"],
+            input_sa["air_pressure"],
+        )
+        / 100.0
     )
     input_sa["time"] = 0
 
@@ -52,21 +55,36 @@ def prepare_radiosonde(rs_data: nc.Dataset) -> dict:
     input_rs["air_temperature"] = rs_data.variables["air_temperature"][:] + con.T0
     input_rs["relative_humidity"] = rs_data.variables["relative_humidity"][:] / 100.0
     input_rs["air_pressure"] = rs_data.variables["air_pressure"][:] * 100.0
-    input_rs["time"] = seconds_since_epoch(
-        str(rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data)
-    )
+    input_rs["time"] = seconds_since_epoch(rs_data.BEZUGSDATUM_SYNOP)
+    # input_rs["time"] = seconds_since_epoch(
+    #     str(rs_data.variables["BEZUGSDATUM_SYNOP"][-1].data)
+    # )
 
     return input_rs
 
 
 def prepare_vaisala(vs_data: nc.Dataset) -> dict:
     input_vs: dict = {}
+    sa = nc.Dataset(
+        "/home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/standard_atmospheres.nc"
+    )
     geopotential = units.Quantity(vs_data.variables["alt"][:] * con.g0, "m^2/s^2")
     input_vs["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
-    input_vs["height"] = input_vs["height"][0, :]
-    input_vs["air_temperature"] = vs_data.variables["ta"][0, :]
-    input_vs["relative_humidity"] = vs_data.variables["rh"][0, :] / 100.0
-    input_vs["air_pressure"] = vs_data.variables["p"][0, :]
+    input_vs["height"] = np.append(
+        input_vs["height"][0, :], sa.variables["height"][17:27] * 1000.0
+    )
+    input_vs["air_temperature"] = np.append(
+        vs_data.variables["ta"][0, :], sa.variables["t_atmo"][17:27, 0]
+    )
+    input_vs["air_pressure"] = np.append(
+        vs_data.variables["p"][0, :], sa.variables["p_atmo"][17:27, 0] * 100.0
+    )
+    rh = q2rh(
+        sa.variables["q_atmo"][17:27, 0],
+        sa.variables["t_atmo"][17:27, 0],
+        sa.variables["p_atmo"][17:27, 0] * 100.0,
+    )
+    input_vs["relative_humidity"] = np.append(vs_data.variables["rh"][0, :] / 100.0, rh)
     input_vs["time"] = seconds_since_epoch(
         vs_data.date_YYYYMMDDTHHMM[0:8] + vs_data.date_YYYYMMDDTHHMM[9:11]
     )
