@@ -76,18 +76,19 @@ def process_input(
                             date, datetime.time(int(hour))
                         ).strftime("%Y%m%d%H")
                         input_ifs = prepare_ifs(ifs_data, index, date_i)
-                        try:
-                            output_hour = call_rad_trans(input_ifs, params)
-                        except ValueError:
-                            logging.info(f"Skipping time {date_i}")
-                        if output_hour is not None:
-                            if date_i[-2:] == "00":
-                                logging.info(
-                                    f"Radiative transfer using {source} data "
-                                    f"for {site}, {date_i[:-2]}"
-                                )
-                            for key, array in output_hour.items():
-                                data_nc = append_data(data_nc, key, array)
+                        if len(input_ifs["height"]) == 137:
+                            try:
+                                output_hour = call_rad_trans(input_ifs, params)
+                            except ValueError:
+                                logging.info(f"Skipping time {date_i}")
+                            if output_hour is not None:
+                                if date_i[-2:] == "00":
+                                    logging.info(
+                                        f"Radiative transfer using {source} data "
+                                        f"for {site}, {date_i[:-2]}"
+                                    )
+                                for key, array in output_hour.items():
+                                    data_nc = append_data(data_nc, key, array)
 
     elif source == "radiosonde":
         for date in date_range(start_date, stop_date):
@@ -118,19 +119,20 @@ def process_input(
             file_name = get_file_list(
                 params["data_vs"], site + "_" + date.strftime("%Y%m%d")
             )
-            with nc.Dataset(file_name[0]) as vs_data:
-                input_vs = prepare_vaisala(vs_data)
-                input_vs["height"] -= params["altitude"]
-            try:
-                output_hour = call_rad_trans(input_vs, params)
-            except ValueError:
-                logging.info(f"Skipping file {file_name[0]}")
-            if output_hour is not None:
-                logging.info(
-                    f"Radiative transfer using {source} data for {site}, {date}"
-                )
-                for key, array in output_hour.items():
-                    data_nc = append_data(data_nc, key, array)
+            for name in file_name:
+                with nc.Dataset(name) as vs_data:
+                    input_vs = prepare_vaisala(vs_data)
+                    input_vs["height"] -= params["altitude"]
+                try:
+                    output_hour = call_rad_trans(input_vs, params)
+                except ValueError:
+                    logging.info(f"Skipping file {file_name[0]}")
+                if output_hour is not None:
+                    logging.info(
+                        f"Radiative transfer using {source} data for {site}, {date}"
+                    )
+                    for key, array in output_hour.items():
+                        data_nc = append_data(data_nc, key, array)
 
     elif source == "era5":
         file_name = (

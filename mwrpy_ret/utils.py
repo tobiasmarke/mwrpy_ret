@@ -270,26 +270,19 @@ def dcerror(x, y):
         53.992906912940207,
         10.479857114260399,
     ]
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        ZH = np.abs(y) - x * 1j
-        ASUM = (
-            ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
-        ) * ZH + a[0]
-        BSUM = (
-            (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH
-            + b[1]
-        ) * ZH + b[0]
-        w = ASUM / BSUM
-        w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
-        if hasattr(y, "__len__"):
-            DCERROR = w
-            DCERROR[y < 0.0] = w2[y < 0.0]
-        else:
-            if y >= 0.0:
-                DCERROR = w
-            else:
-                DCERROR = w2
+
+    ZH = complex(np.abs(y), -x)
+    ASUM = (
+        ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
+    ) * ZH + a[0]
+    BSUM = (
+        (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH + b[1]
+    ) * ZH + b[0]
+    w = ASUM / BSUM
+    if y >= 0:
+        DCERROR = w
+    else:
+        DCERROR = 2.0 * np.exp(-complex(x, y) ** 2) - w
 
     return DCERROR
 

@@ -1,3 +1,5 @@
+import os
+
 import metpy.calc
 import netCDF4 as nc
 import numpy as np
@@ -30,15 +32,12 @@ def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
         "height": sa_data.variables["height"][:] * 1000.0,
         "air_temperature": sa_data.variables["t_atmo"][:, 0],
         "air_pressure": sa_data.variables["p_atmo"][:, 0] * 100.0,
-        "absolute_humidity": sa_data.variables["a_atmo"][:, 0],
+        "absolute_humidity1": sa_data.variables["a_atmo"][:, 0],
     }
-    input_sa["relative_humidity"] = (
-        q2rh(
-            sa_data.variables["q_atmo"][:, 0] * 1000.0,
-            input_sa["air_temperature"],
-            input_sa["air_pressure"],
-        )
-        / 100.0
+    input_sa["relative_humidity"] = q2rh(
+        sa_data.variables["q_atmo"][:, 0] * 1000.0,
+        input_sa["air_temperature"],
+        input_sa["air_pressure"],
     )
     input_sa["time"] = 0
 
@@ -66,25 +65,29 @@ def prepare_radiosonde(rs_data: nc.Dataset) -> dict:
 def prepare_vaisala(vs_data: nc.Dataset) -> dict:
     input_vs: dict = {}
     sa = nc.Dataset(
-        "/home/tmarke/Dokumente/GitHub/mwrpy_ret/tests/data/standard_atmospheres.nc"
+        os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        + "/tests/data/standard_atmospheres.nc"
     )
     geopotential = units.Quantity(vs_data.variables["alt"][:] * con.g0, "m^2/s^2")
     input_vs["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
+    ind_sa = np.where(sa.variables["height"][:] * 1000.0 > 15000.0)[0]
     input_vs["height"] = np.append(
-        input_vs["height"][0, :], sa.variables["height"][17:27] * 1000.0
+        input_vs["height"][0, 0:2800], sa.variables["height"][ind_sa] * 1000.0
     )
     input_vs["air_temperature"] = np.append(
-        vs_data.variables["ta"][0, :], sa.variables["t_atmo"][17:27, 0]
+        vs_data.variables["ta"][0, 0:2800], sa.variables["t_atmo"][ind_sa, 0]
     )
     input_vs["air_pressure"] = np.append(
-        vs_data.variables["p"][0, :], sa.variables["p_atmo"][17:27, 0] * 100.0
+        vs_data.variables["p"][0, 0:2800], sa.variables["p_atmo"][ind_sa, 0] * 100.0
     )
     rh = q2rh(
-        sa.variables["q_atmo"][17:27, 0],
-        sa.variables["t_atmo"][17:27, 0],
-        sa.variables["p_atmo"][17:27, 0] * 100.0,
+        sa.variables["q_atmo"][ind_sa, 0] * 1000.0,
+        sa.variables["t_atmo"][ind_sa, 0],
+        sa.variables["p_atmo"][ind_sa, 0] * 100.0,
     )
-    input_vs["relative_humidity"] = np.append(vs_data.variables["rh"][0, :] / 100.0, rh)
+    input_vs["relative_humidity"] = np.append(
+        vs_data.variables["rh"][0, 0:2800] / 100.0, rh
+    )
     input_vs["time"] = seconds_since_epoch(
         vs_data.date_YYYYMMDDTHHMM[0:8] + vs_data.date_YYYYMMDDTHHMM[9:11]
     )

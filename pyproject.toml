@@ -27,7 +27,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-test = ["mypy", "pylint", "pysonde", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
+test = ["mypy", "pre-commit", "pylint", "pysonde", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
 
 [project.urls]
 Homepage = "https://github.com/tobiasmarke/mwrpy_ret"
