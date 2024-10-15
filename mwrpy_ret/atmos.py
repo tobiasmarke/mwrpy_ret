@@ -18,32 +18,29 @@ def abs_hum(T: np.ndarray, rh: np.ndarray) -> np.ndarray:
     return (rh * es) / (con.RW * T)
 
 
+def calc_rho(T: np.ndarray, rh: np.ndarray):
+    es = calc_saturation_vapor_pressure(T) / 100.0
+
+    return es * rh / 1000.0
+
+
 def calc_saturation_vapor_pressure(temperature: np.ndarray) -> np.ndarray:
-    """Goff-Gratch formula for saturation vapor pressure (Pa) over water adopted by WMO.
+    """saturation vapor pressure (Pa) over water adapted from pyrtlib.
     Args:
         temperature: Temperature (K).
     Returns:
         Saturation vapor pressure (Pa).
     """
-    ratio = con.T0 / temperature
-    inv_ratio = ratio**-1
-    return (
-        10
-        ** (
-            10.79574 * (1 - ratio)
-            - 5.028 * np.log10(inv_ratio)
-            + 1.50475e-4 * (1 - (10 ** (-8.2969 * (inv_ratio - 1))))
-            + 0.42873e-3 * (10 ** (4.76955 * (1 - ratio)) - 1)
-            + 0.78614
-        )
-    ) * 100.0
+    y = 373.16 / temperature
+    es = (
+        np.dot(-7.90298, (y - 1.0))
+        + np.dot(5.02808, np.log10(y))
+        - np.dot(1.3816e-07, (10 ** (np.dot(11.344, (1.0 - (1.0 / y)))) - 1.0))
+        + np.dot(0.0081328, (10 ** (np.dot(-3.49149, (y - 1.0))) - 1.0))
+        + np.log10(1013.246)
+    )
 
-
-def abshum_to_vap(T, p, rho):
-    e = rho * con.RW * T
-    m = con.MW_RATIO * e / (p - e)
-    m[m == 0.0] = 1e-8
-    return p * m / (con.MW_RATIO + m)
+    return 10.0**es * 100.0
 
 
 def q2rh(q, T, p):
@@ -59,10 +56,13 @@ def q2rh(q, T, p):
     rh is in Pa/Pa
     """
 
-    e = p / (con.MW_RATIO * ((1 / q) + (1 / con.MW_RATIO - 1)))
-    eStar = calc_saturation_vapor_pressure(T)
+    esat = calc_saturation_vapor_pressure(T)
 
-    return e / eStar
+    eps = 0.621970585
+    e = np.multiply(p, q) / (np.dot(1000.0, eps) + q)
+    rh = np.dot(100.0, e) / esat
+
+    return rh / 100.0
 
 
 def moist_rho_rh(p, T, rh):
@@ -229,6 +229,12 @@ def adiab(i, T, P, z):
 
 
 def mod_ad(T_cloud, p_cloud, z_cloud):
+    """
+    :param T_cloud: Temperature [K]
+    :param p_cloud: Pressure [Pa]
+    :param z_cloud: Height [m]
+    :return: LWC, cloud_new
+    """
     n_level = len(T_cloud)
     lwc = np.zeros(n_level - 1)
     cloud_new = np.zeros(n_level - 1)
@@ -274,10 +280,16 @@ def pseudoAdiabLapseRate(T, Ws):
 def get_cloud_prop(
     base: np.ndarray,
     top: np.ndarray,
-    height_int: np.ndarray,
     input_dat: dict,
     method: str,
-) -> tuple[np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, float]:
+    """
+    :param base: Cloud base [m]
+    :param top: Cloud top [m]
+    :param input_dat: Input data
+    :param method: Method
+    :return: LWC, LWP
+    """
     lwc, lwp, height_new, cloud_new, lwc_new = (
         np.empty(0, np.float64),
         0.0,
@@ -310,19 +322,22 @@ def get_cloud_prop(
                 lwc = np.hstack((lwc, lwcx))
 
                 if len(height_new) == 0:
-                    height_new = height_int[height_int < base[0]]
+                    height_new = input_dat["height"][input_dat["height"][:] < base[0]]
                 else:
                     height_new = np.hstack(
                         (
                             height_new,
-                            height_int[
-                                (height_int > top[icl - 1]) & (height_int < base[icl])
+                            input_dat["height"][
+                                (input_dat["height"][:] > top[icl - 1])
+                                & (input_dat["height"][:] < base[icl])
                             ],
                         )
                     )
 
         # New vertical grid
-        height_new = np.hstack((height_new, height_int[height_int > top[-1]]))
+        height_new = np.hstack(
+            (height_new, input_dat["height"][input_dat["height"][:] > top[-1]])
+        )
         height_new = np.sort(np.hstack((height_new, cloud_new)))
 
         # Distribute liquid water
@@ -333,14 +348,20 @@ def get_cloud_prop(
             )
             lwc_new[xx] = lwc[yy]
 
-    return height_new, lwc_new, lwp
+    lwc_in = np.interp(input_dat["height"][:], height_new, lwc_new)
 
-
-def interp_log_p(p, z, z_int):
-    return np.power(10.0, np.interp(np.log10(z_int), np.log10(z), np.log10(p)))
+    return lwc_in, lwp
 
 
 def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
+    """
+    :param level: Model level
+    :param ps: Surface Pressure
+    :param gpot: Geopotential Height at Surface
+    :param temp: Temperature
+    :param hum: Humidity
+    :return: Height, Pressure
+    """
     file_mh = (
         os.path.dirname(os.path.realpath(__file__))
         + "/rad_trans/coeff/era5_model_levels_137.csv"
@@ -367,6 +388,6 @@ def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
 
         temp[i_z] = (temp[i_z] * (1.0 + 0.609133 * hum[i_z])) * con.RS
         z_f[i_z] = gpot + (temp[i_z] * alpha)
-        gpot = gpot + (temp[i_z] * dlog_p)
+        gpot += temp[i_z] * dlog_p
 
     return np.flip(z_f), np.flip(pres)

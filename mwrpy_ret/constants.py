@@ -16,7 +16,7 @@ LATENT_HEAT = 2.26e6
 RS = 287.058
 
 # Specific gas constant for water vapor (J/kg K)
-RW = 461.5
+RW = 461.52
 
 # Vapor pressure e0 (Pa) at T0 (K)
 e0 = 611.0
@@ -25,10 +25,13 @@ e0 = 611.0
 g0 = 9.80665
 
 # Planck constant
-h = 6.6262e-34
+h = 6.626075499999999e-34
 
 # Boltzmann constant
-kB = 1.3806e-23
+kB = 1.3806579999999998e-23
 
 # Speed of light in vacuum (m/s)
 c = 2.99792458 * 1e8
+
+# Cosmic background (K)
+Tc = 2.728

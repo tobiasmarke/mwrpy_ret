@@ -5,7 +5,7 @@ import logging
 import os
 import warnings
 from datetime import timezone
-from typing import Any, Iterator, Literal, NamedTuple
+from typing import Any, Iterator, Literal, NamedTuple, Tuple
 
 import numpy as np
 import yaml
@@ -241,13 +241,13 @@ def loadCoeffsJSON(path) -> dict:
     if os.path.exists(path):
         with open(path, "r", encoding="utf8") as f:
             try:
-                var_all = dict(**json.load(f))
+                var_all = {**json.load(f)}
                 for key in var_all.keys():
                     var_all[key] = np.asarray(var_all[key])
             except json.decoder.JSONDecodeError:
                 print(path)
                 raise
-    return dict(**var_all)
+    return {**var_all}
 
 
 def dcerror(x, y):
@@ -270,26 +270,19 @@ def dcerror(x, y):
         53.992906912940207,
         10.479857114260399,
     ]
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        ZH = np.abs(y) - x * 1j
-        ASUM = (
-            ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
-        ) * ZH + a[0]
-        BSUM = (
-            (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH
-            + b[1]
-        ) * ZH + b[0]
-        w = ASUM / BSUM
-        w2 = 2.0 * np.exp(-((x + y * 1j) ** 2)) - np.conj(w)
-        if hasattr(y, "__len__"):
-            DCERROR = w
-            DCERROR[y < 0.0] = w2[y < 0.0]
-        else:
-            if y >= 0.0:
-                DCERROR = w
-            else:
-                DCERROR = w2
+
+    ZH = complex(np.abs(y), -x)
+    ASUM = (
+        ((((a[6] * ZH + a[5]) * ZH + a[4]) * ZH + a[3]) * ZH + a[2]) * ZH + a[1]
+    ) * ZH + a[0]
+    BSUM = (
+        (((((ZH + b[6]) * ZH + b[5]) * ZH + b[4]) * ZH + b[3]) * ZH + b[2]) * ZH + b[1]
+    ) * ZH + b[0]
+    w = ASUM / BSUM
+    if y >= 0:
+        DCERROR = w
+    else:
+        DCERROR = 2.0 * np.exp(-complex(x, y) ** 2) - w
 
     return DCERROR
 
@@ -300,3 +293,51 @@ def GAUSS(ape_ang, theta):
     arg = arg[arg < 9.0]
 
     return np.exp(-arg * arg / 2.0) * arg
+
+
+def exponential_integration(
+    zeroflg: bool, x: np.ndarray, ds: np.ndarray, ibeg: int, iend: int, factor: float
+) -> Tuple[float, np.ndarray]:
+    """EXPonential INTegration: Integrate the profile in array x over the
+    layers defined in array ds, saving the integrals over each layer.
+
+    Args:
+        zeroflg (bool): Flag to handle zero values (0:layer=0, 1:layer=avg).
+        x (numpy.ndarray): Profile array.
+        ds (numpy.ndarray): Array of layer depths (km).
+        ibeg (int): Lower integration limit (profile level number).
+        iend (int): Upper integration limit (profile level number).
+        factor (float): Factor by which result is multiplied (e.g., unit change).
+
+    Returns:
+        Tuple[float, numpy.ndarray]:
+        * xds (numpy.ndarray): Array containing integrals over each layer ds
+        * sxds (numpy.ndarray): Integral of x*ds over levels ibeg to iend
+    adapted from pyrtlib
+    """
+
+    sxds = 0.0
+    xds = np.zeros(ds.shape)
+    for i in range(ibeg, iend):
+        # Check for negative x value. If found, output message and return.
+        if x[i - 1] < 0.0 or x[i] < 0.0:
+            warnings.warn("Error encountered in exponential_integration")
+            return sxds, xds
+            # Find a layer value for x in cases where integration algorithm fails.
+        if np.abs(x[i] - x[i - 1]) < 1e-09:
+            xlayer = x[i]
+        elif x[i - 1] == 0.0 or x[i] == 0.0:
+            if not zeroflg:
+                xlayer = 0.0
+            else:
+                xlayer = np.dot((x[i] + x[i - 1]), 0.5)
+        else:
+            # Find a layer value for x assuming exponential decay over the layer.
+            xlayer = (x[i] - x[i - 1]) / np.log(x[i] / x[i - 1])
+        # Integrate x over the layer and save the result in xds.
+        xds[i] = np.dot(xlayer, ds[i])
+        sxds = sxds + xds[i]
+
+    sxds = np.dot(sxds, factor)
+
+    return sxds, xds.reshape(iend)
