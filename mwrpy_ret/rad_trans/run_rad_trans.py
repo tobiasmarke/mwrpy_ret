@@ -2,11 +2,11 @@ import numpy as np
 
 from mwrpy_ret.atmos import (
     abs_hum,
+    calc_rho,
     detect_cloud_mod,
     detect_liq_cloud,
     get_cloud_prop,
     hum_to_iwv,
-    interp_log_p,
 )
 from mwrpy_ret.rad_trans import calc_mw_rt
 
@@ -28,6 +28,7 @@ def rad_trans(
         input_dat["absolute_humidity"] = abs_hum(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
+    e = calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
     if np.any(input_dat["absolute_humidity"].mask):
         iwv = -999.0
     else:
@@ -37,7 +38,7 @@ def rad_trans(
         )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
-    cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else "detected"
+    cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else ["detected"]
     for method in cloud_methods:
         if method == "prognostic":
             top, base = detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
@@ -49,34 +50,18 @@ def rad_trans(
                 input_dat["air_pressure"][:],
             )
         if len(top) in np.linspace(1, 15, 15):
-            height_new, lwc_new, lwp_tmp = get_cloud_prop(
-                base, top, input_dat["height"][:], input_dat, method
-            )
-            # Interpolate to new grid
-            pressure_new = interp_log_p(
-                input_dat["air_pressure"][:], input_dat["height"][:], height_new
-            )
-            temperature_new = np.interp(
-                height_new, input_dat["height"][:], input_dat["air_temperature"][:]
-            )
-            abshum_new = np.interp(
-                height_new, input_dat["height"][:], input_dat["absolute_humidity"][:]
-            )
+            lwc, lwp_tmp = get_cloud_prop(base, top, input_dat, method)
         else:
-            height_new = input_dat["height"][:]
-            lwc_new = np.zeros(len(height_new), np.float32)
+            lwc = np.zeros(len(input_dat["height"][:]), np.float32)
             lwp_tmp = 0.0
-            temperature_new = input_dat["air_temperature"][:]
-            pressure_new = input_dat["air_pressure"][:]
-            abshum_new = input_dat["absolute_humidity"][:]
 
         # Radiative transport
         tb_tmp[0, :, 0], tau_k, tau_v = calc_mw_rt(
-            height_new,
-            temperature_new,
-            pressure_new,
-            abshum_new,
-            lwc_new,
+            input_dat["height"][:],
+            input_dat["air_temperature"][:],
+            input_dat["air_pressure"][:],
+            e,
+            lwc,
             theta[0],
             np.array(params["frequency"]),
             coeff_bdw,
@@ -85,11 +70,11 @@ def rad_trans(
         if len(theta) > 1:
             for i_ang in range(len(theta) - 1):
                 tb_tmp[0, :, i_ang + 1], _, _ = calc_mw_rt(
-                    height_new,
-                    temperature_new,
-                    pressure_new,
-                    abshum_new,
-                    lwc_new,
+                    input_dat["height"][:],
+                    input_dat["air_temperature"][:],
+                    input_dat["air_pressure"][:],
+                    e,
+                    lwc,
                     theta[i_ang + 1],
                     np.array(params["frequency"]),
                     coeff_bdw,
@@ -98,9 +83,9 @@ def rad_trans(
                     tau_v,
                 )
         if method == "prognostic":
-            lwp_pro, tb_pro = np.copy(lwp_tmp), np.copy(tb_tmp)
+            lwp_pro, tb_pro = lwp_tmp, tb_tmp
         else:
-            lwp, tb = np.copy(lwp_tmp), np.copy(tb_tmp)
+            lwp, tb = lwp_tmp, tb_tmp
 
     # Interpolate to final grid
     pressure_int = np.interp(

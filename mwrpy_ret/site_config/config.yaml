@@ -19,6 +19,13 @@ params:
       56.660,
       57.300,
       58.00,
+      90.0,
+      183.91,
+      184.81,
+      185.81,
+      186.81,
+      188.31,
+      190.81,
     ]
 
   height:
@@ -78,6 +85,6 @@ params:
 
 global_specs:
   title:
-  model: R22
+  model: R24
   corr: Without bandwidth and beamwidth correction
   cloud: Cloudy cases excluded
