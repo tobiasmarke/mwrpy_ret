@@ -1,3 +1,8 @@
+## 0.7.0 – 2024-10-15
+
+- Update to Rosenkranz 2024
+- Comparison based review
+
 ## 0.6.3 – 2024-04-23
 
 - Refactor Vaisala config
