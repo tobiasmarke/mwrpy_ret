@@ -130,38 +130,35 @@ def ABWV_R24(
             CF["W0"][i] / 1000.0 * PDA * TI ** CF["X"][i]
             + CF["W0S"][i] / 1000.0 * PVAP * TI ** CF["XS"][i]
         )
-        if CF["W2"][i] > 0.0:
-            WIDTH2 = (
+        WIDTH2 = (
+            (
                 CF["W2"][i] / 1000.0 * PDA * TI ** CF["XW2"][i]
                 + CF["W2S"][i] / 1000.0 * PVAP * TI ** CF["XW2S"][i]
             )
-        else:
-            WIDTH2 = 0.0
+            if CF["W2"][i] > 0.0
+            else 0.0
+        )
         DELTA2 = CF["D2"][i] / 1000.0 * PDA + CF["D2S"][i] / 1000.0 * PVAP
-        SHIFTF = (
+        SHIFT = (
             CF["SH"][i]
             / 1000.0
             * PDA
             * (1.0 - CF["AAIR"][i] * TILN)
             * TI ** CF["XH"][i]
-        )
-        SHIFTS = (
+        ) + (
             CF["SHS"][i]
             / 1000.0
             * PVAP
             * (1.0 - CF["ASELF"][i] * TILN)
             * TI ** CF["XHS"][i]
         )
-        SHIFT = SHIFTF + SHIFTS
         S = CF["S1"][i] * TI2 * np.exp(CF["B2"][i] * (1.0 - TI))
 
-        DF = np.zeros(2, np.float32)
-        DF[0] = F - FL - SHIFT
-        DF[1] = F + FL + SHIFT
+        DF = np.array([F - FL - SHIFT, F + FL + SHIFT], np.float32)
         WSQ = WIDTH0**2.0
         BASE = WIDTH0 / (562500.0 + WSQ)
         RES = 0.0
-        for J in range(0, 2):
+        for J in range(2):
             if WIDTH2 > 0 and J == 0 and np.abs(DF[J]) < (10 * WIDTH0):
                 XC = complex((WIDTH0 - 1.5 * WIDTH2), DF[J] + 1.5 * DELTA2) / complex(
                     WIDTH2, -DELTA2
@@ -187,19 +184,18 @@ def H2OCON(F, T):
     SELFTEXP = [6.413, 6.414, 6.275, 6.049, 5.789, 5.557]
 
     THETA = 296.0 / T
-    A = np.zeros(NF, np.float32)
-    for j in range(NF):
-        A[j] = 6.532e12 * SELFCON[j] * THETA ** (SELFTEXP[j] + 3.0)
-    A = np.insert(A, 0, A[1], axis=0)
+    A = np.array(
+        [6.532e12 * SELFCON[j] * THETA ** (SELFTEXP[j] + 3.0) for j in range(NF)],
+        np.float32,
+    )
+    A = np.insert(A, 0, A[1])
 
     FJ = F / 299.792458
-    J = np.int32(FJ)
-    J = np.minimum(J, NF - 2)
+    J = np.minimum(np.int32(FJ), NF - 2)
     P = FJ - J
     C = (3.0 - 2.0 * P) * P**2.0
     B = 0.5 * P * (1.0 - P)
-    B1 = B * (1.0 - P)
-    B2 = B * P
+    B1, B2 = B * (1.0 - P), B * P
 
     return -A[J] * B1 + A[J + 1] * (1.0 - C + B2) + A[J + 2] * (C + B1) - A[J + 3] * B2
 
@@ -252,34 +248,22 @@ def ABO2_R22(TEMP, PRES, VAPDEN, FREQ):
 
 
 def ABO2_R24(TEMP, PRES, VAPDEN, FREQ):
-    """
-    ABSORPTION COEFFICIENT DUE TO OXYGEN IN AIR
-    TEMP    KELVIN   TEMPERATURE        UNCERTAIN, but believed to be
-                                         valid for atmosphere
-    PRES   MILLIBARS PRESSURE           3 TO 1000
-    VAPDEN  G/M^3    WV DENSITY         (ENTERS LINEWIDTH CALCULATION
-                     DUE TO GREATER BROADENING EFFICIENCY OF H2O)
-    FREQ    GHZ      FREQUENCY          0 TO 900
-    """
-
-    path = os.path.dirname(os.path.realpath(__file__)) + "/coeff/r24/o2_list.json"
+    """Calculate absorption coefficient due to oxygen in air."""
+    path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "coeff/r24/o2_list.json"
+    )
     CF = loadCoeffsJSON(path)
 
     RVAP = (0.01 * 8.314510) / 18.01528
-    VAPDEN = VAPDEN / (RVAP * TEMP)
-
+    VAPDEN /= RVAP * TEMP
     TH = 300.0 / TEMP
     TH1 = TH - 1.0
     PRESWV = 4.615228e-3 * VAPDEN * TEMP
     PRESDA = PRES - PRESWV
     PE1 = 0.001 * (PRESDA * TH ** CF["X"] + 1.2 * PRESWV * TH)
-    ADJY = 0.99
     PE2 = PE1**2
     WNR = CF["WB300"] * PE1
-    ANORM = 0.0
-    SUMY = 1.584e-17 * CF["WB300"]
-    SUMG = 0.0
-    ASQ = 0.0
+    SUMM = 1.584e-17 * WNR / (FREQ**2.0 + WNR**2.0)
 
     A, Y, G = (
         np.zeros(len(CF["F"]), np.float32),
@@ -288,23 +272,20 @@ def ABO2_R24(TEMP, PRES, VAPDEN, FREQ):
     )
     for k, f in enumerate(CF["F"]):
         A[k] = CF["S300"][k] * np.exp(-CF["BE"][k] * TH1) * TH / f**2
-        Y[k] = ADJY * (CF["Y300"][k] + CF["Y1"][k] * TH1)
-
-        if k < 38:
-            SUMY += 2.0 * A[k] * (CF["W300"][k] + Y[k] * f)
+        Y[k] = 0.99 * (CF["Y300"][k] + CF["Y1"][k] * TH1)
         G[k] = CF["G0"][k] + CF["G1"][k] * TH1
 
-        if 0 < k < 38:
-            SUMG += A[k] * G[k]
-            ASQ += np.double(A[k]) ** 2
-            ANORM += A[k]
-
+    SUMY = 1.584e-17 * CF["WB300"] + 2.0 * np.sum(
+        A[:38] * (CF["W300"][:38] + Y[:38] * CF["F"][:38])
+    )
+    SUMG = np.sum(A[1:37] * G[1:37])
+    ASQ = np.sum(A[1:37] ** 2)
+    ANORM = np.sum(A[1:37])
     SUMY2 = SUMY / (2.0 * ANORM)
     RATIO = SUMG / ASQ
     Y[1:37] -= SUMY2 / CF["F"][1:37]
     G[1:37] -= A[1:37] * RATIO
 
-    SUMM = 1.584e-17 * WNR / (FREQ**2.0 + WNR**2.0)
     for k, F in enumerate(CF["F"]):
         WIDTH = CF["W300"][k] * PE1
         YK = PE1 * Y[k]

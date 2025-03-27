@@ -20,7 +20,6 @@ def rad_trans(
     theta = 90.0 - np.array(params["elevation_angle"])
     tb = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
     tb_pro = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
-    tb_tmp = np.ones((1, len(params["frequency"]), len(theta)), np.float32) * -999.0
     lwp, lwp_pro = -999.0, -999.0
 
     # Integrated water vapor [kg/m²]
@@ -29,17 +28,22 @@ def rad_trans(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
     e = calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
-    if np.any(input_dat["absolute_humidity"].mask):
-        iwv = -999.0
+    if "iwv" in input_dat:
+        iwv = input_dat["iwv"].data
     else:
-        iwv = hum_to_iwv(
-            input_dat["absolute_humidity"][:],
-            input_dat["height"][:],
+        iwv = (
+            hum_to_iwv(
+                input_dat["absolute_humidity"][:],
+                input_dat["height"][:],
+            )
+            if not np.any(input_dat["absolute_humidity"].mask)
+            else -999.0
         )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
     cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else ["detected"]
     for method in cloud_methods:
+        tb_tmp = np.ones((len(params["frequency"]), len(theta)), np.float32) * -999.0
         if method == "prognostic":
             top, base = detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
         else:
@@ -56,7 +60,7 @@ def rad_trans(
             lwp_tmp = 0.0
 
         # Radiative transport
-        tb_tmp[0, :, 0], tau_k, tau_v = calc_mw_rt(
+        tb_tmp[:, 0], tau_k, tau_v = calc_mw_rt(
             input_dat["height"][:],
             input_dat["air_temperature"][:],
             input_dat["air_pressure"][:],
@@ -68,14 +72,14 @@ def rad_trans(
             ape_ang,
         )
         if len(theta) > 1:
-            for i_ang in range(len(theta) - 1):
-                tb_tmp[0, :, i_ang + 1], _, _ = calc_mw_rt(
+            for i_ang, ang in enumerate(theta[1:]):
+                tb_tmp[:, i_ang + 1], _, _ = calc_mw_rt(
                     input_dat["height"][:],
                     input_dat["air_temperature"][:],
                     input_dat["air_pressure"][:],
                     e,
                     lwc,
-                    theta[i_ang + 1],
+                    ang,
                     np.array(params["frequency"]),
                     coeff_bdw,
                     ape_ang,
@@ -106,8 +110,8 @@ def rad_trans(
 
     output = {
         "time": np.asarray([input_dat["time"]]),
-        "tb": tb,
-        "tb_pro": tb_pro,
+        "tb": np.expand_dims(tb, 0),
+        "tb_pro": np.expand_dims(tb_pro, 0),
         "air_temperature": np.expand_dims(temperature_int, 0),
         "air_pressure": np.expand_dims(pressure_int, 0),
         "absolute_humidity": np.expand_dims(abshum_int, 0),

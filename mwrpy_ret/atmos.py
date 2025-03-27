@@ -202,7 +202,7 @@ def adiab(i, T, P, z):
         RWV = abs_hum(T[j], np.ones(1, np.float32))
         WS = RWV / (R - RWV)
         DTPS = pseudoAdiabLapseRate(T[j], WS)
-        TCL = TCL - DTPS * deltaz
+        TCL -= DTPS * deltaz
 
         #   Compute adiabatic LWC
 
@@ -217,7 +217,7 @@ def adiab(i, T, P, z):
         WS = RWV / (R - RWV)
         L = spec_heat(TCL)
 
-        LWC = LWC + (
+        LWC += (
             R
             * con.SPECIFIC_HEAT
             / L
@@ -243,8 +243,9 @@ def mod_ad(T_cloud, p_cloud, z_cloud):
     for jj in range(n_level - 1):
         deltaz = z_cloud[jj + 1] - z_cloud[jj]
         thick = deltaz + thick
-        lwc[jj] = adiab(jj + 1, T_cloud, p_cloud, z_cloud)
-        lwc[jj] = lwc[jj] * (-0.144779 * np.log(thick) + 1.239387)
+        lwc[jj] = adiab(jj + 1, T_cloud, p_cloud, z_cloud) * (
+            -0.144779 * np.log(thick) + 1.239387
+        )
         cloud_new[jj] = z_cloud[jj] + deltaz / 2.0
     return lwc, cloud_new
 
@@ -278,34 +279,19 @@ def pseudoAdiabLapseRate(T, Ws):
 
 
 def get_cloud_prop(
-    base: np.ndarray,
-    top: np.ndarray,
-    input_dat: dict,
-    method: str,
+    base: np.ndarray, top: np.ndarray, input_dat: dict, method: str
 ) -> tuple[np.ndarray, float]:
-    """
-    :param base: Cloud base [m]
-    :param top: Cloud top [m]
-    :param input_dat: Input data
-    :param method: Method
-    :return: LWC, LWP
-    """
-    lwc, lwp, height_new, cloud_new, lwc_new = (
-        np.empty(0, np.float64),
-        0.0,
-        np.empty(0, np.float64),
-        np.empty(0, np.float64),
-        np.empty(0, np.float64),
-    )
-
+    """Calculate cloud properties."""
     if method == "prognostic":
         lwc_new, height_new = input_dat["lwc"][:], input_dat["height"][:]
-        lwp = lwp + np.sum(
+        lwp = np.sum(
             (input_dat["lwc"][1:] + input_dat["lwc"][:-1])
             / 2.0
             * np.diff(input_dat["height"][:])
         )
     else:
+        lwc, cloud_new = np.empty(0, np.float64), np.empty(0, np.float64)
+        lwp, height_new = 0.0, np.empty(0, np.float64)
         for icl, _ in enumerate(top):
             xcl = np.where(
                 (input_dat["height"][:] >= base[icl] - 0.01)
@@ -317,10 +303,9 @@ def get_cloud_prop(
                     input_dat["air_pressure"][xcl],
                     input_dat["height"][xcl],
                 )
-                lwp = lwp + np.sum(lwcx * np.diff(input_dat["height"][xcl]))
+                lwp += np.sum(lwcx * np.diff(input_dat["height"][xcl]))
                 cloud_new = np.hstack((cloud_new, cloudx))
                 lwc = np.hstack((lwc, lwcx))
-
                 if len(height_new) == 0:
                     height_new = input_dat["height"][input_dat["height"][:] < base[0]]
                 else:
@@ -333,14 +318,15 @@ def get_cloud_prop(
                             ],
                         )
                     )
-
-        # New vertical grid
-        height_new = np.hstack(
-            (height_new, input_dat["height"][input_dat["height"][:] > top[-1]])
+        height_new = np.sort(
+            np.hstack(
+                (
+                    height_new,
+                    cloud_new,
+                    input_dat["height"][input_dat["height"][:] > top[-1]],
+                )
+            )
         )
-        height_new = np.sort(np.hstack((height_new, cloud_new)))
-
-        # Distribute liquid water
         lwc_new = np.zeros(len(height_new), np.float32)
         if len(lwc) > 0:
             _, xx, yy = np.intersect1d(
@@ -349,7 +335,6 @@ def get_cloud_prop(
             lwc_new[xx] = lwc[yy]
 
     lwc_in = np.interp(input_dat["height"][:], height_new, lwc_new)
-
     return lwc_in, lwp
 
 

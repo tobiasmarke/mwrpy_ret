@@ -20,7 +20,14 @@ def get_data_attributes(ret_variables: dict, source: str) -> dict:
         att = get_data_attributes('data','data_type')
     """
 
-    if source not in ("ifs", "radiosonde", "vaisala", "era5", "standard_atmosphere"):
+    if source not in (
+        "ifs",
+        "radiosonde",
+        "vaisala",
+        "era5",
+        "icon",
+        "standard_atmosphere",
+    ):
         raise RuntimeError([source + " not supported for file writing."])
 
     for key in ATTRIBUTES_SOURCE:
