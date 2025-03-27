@@ -67,6 +67,8 @@ def _get_filename(
     params = read_config(site, "params")
     if site == "standard_atmosphere":
         filename = f"{site}.nc"
+    elif (stop - start).total_seconds() / 3600.0 == 24.0:
+        filename = f"{site}_{source}_{start.strftime('%Y%m%d')}.nc"
     else:
         filename = (
             f"{site}_{source}_{start.strftime('%Y%m%d')}_{stop.strftime('%Y%m%d')}.nc"

@@ -1,3 +1,7 @@
+## 0.7.1 – 2025-03-27
+
+- Add ICON model
+
 ## 0.7.0 – 2024-10-15
 
 - Update to Rosenkranz 2024

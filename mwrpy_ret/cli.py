@@ -25,6 +25,7 @@ def _parse_args(args):
             "radiosonde",
             "vaisala",
             "era5",
+            "icon",
             "get_era5",
             "standard_atmosphere",
         ],

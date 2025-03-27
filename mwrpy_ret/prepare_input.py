@@ -29,13 +29,13 @@ def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
 
 def prepare_standard_atmosphere(sa_data: nc.Dataset) -> dict:
     input_sa = {
-        "height": sa_data.variables["height"][:] * 1000.0,
-        "air_temperature": sa_data.variables["t_atmo"][:, 0],
-        "air_pressure": sa_data.variables["p_atmo"][:, 0] * 100.0,
-        "absolute_humidity1": sa_data.variables["a_atmo"][:, 0],
+        "height": sa_data.variables["height"][:].astype(np.float64) * 1000.0,
+        "air_temperature": sa_data.variables["t_atmo"][:, 0].astype(np.float64),
+        "air_pressure": sa_data.variables["p_atmo"][:, 0].astype(np.float64) * 100.0,
+        "absolute_humidity1": sa_data.variables["a_atmo"][:, 0].astype(np.float64),
     }
     input_sa["relative_humidity"] = q2rh(
-        sa_data.variables["q_atmo"][:, 0] * 1000.0,
+        sa_data.variables["q_atmo"][:, 0].astype(np.float64) * 1000.0,
         input_sa["air_temperature"],
         input_sa["air_pressure"],
     )
@@ -95,7 +95,47 @@ def prepare_vaisala(vs_data: nc.Dataset) -> dict:
     return input_vs
 
 
-def prepare_era5(mod_data: dict, index: int, date_i: str) -> dict:
+def prepare_icon(icon_data: nc.Dataset, index: int, date_i: str) -> dict:
+    sa = nc.Dataset(
+        os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        + "/tests/data/standard_atmospheres.nc"
+    )
+    ind_sa = np.where(sa.variables["height"][:] > 20.0)[0]
+    rh = q2rh(
+        sa.variables["q_atmo"][ind_sa, 0] * 1000.0,
+        sa.variables["t_atmo"][ind_sa, 0],
+        sa.variables["p_atmo"][ind_sa, 0] * 100.0,
+    )
+
+    input_icon = {
+        "height": np.append(
+            np.flip(icon_data["height_2"][:]) - icon_data["height_2"][-1],
+            sa.variables["height"][ind_sa] * 1000.0,
+        ),
+        "air_temperature": np.append(
+            np.flip(icon_data["T"][index, :]), sa.variables["t_atmo"][ind_sa, 0]
+        ),
+        "air_pressure": np.append(
+            np.flip(icon_data["P"][index, :]), sa.variables["p_atmo"][ind_sa, 0] * 100.0
+        ),
+        "relative_humidity": np.append(
+            np.flip(icon_data["REL_HUM"][index, :]) / 100.0, rh
+        ),
+    }
+    input_icon["lwc"] = np.append(
+        np.flip(icon_data["QC"][index, :]), np.zeros(len(ind_sa))
+    ) * moist_rho_rh(
+        input_icon["air_pressure"],
+        input_icon["air_temperature"],
+        input_icon["relative_humidity"],
+    )
+    input_icon["time"] = seconds_since_epoch(date_i)
+    input_icon["iwv"] = icon_data["TQV"][index]
+
+    return input_icon
+
+
+def prepare_era5(mod_data: nc.Dataset, index: int, date_i: str) -> dict:
     input_era5: dict = {}
     geopotential, input_era5["air_pressure"] = era5_geopot(
         mod_data["level"][:],
@@ -109,16 +149,16 @@ def prepare_era5(mod_data: dict, index: int, date_i: str) -> dict:
     input_era5["height"] = input_era5["height"][:107]
     input_era5["air_pressure"] = input_era5["air_pressure"][:107]
     input_era5["air_temperature"] = np.flip(
-        np.mean(mod_data["t"][index, :, :, :107], axis=(1, 2))
-    )
+        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
+    )[:107]
     input_era5[
         "relative_humidity"
     ] = metpy.calc.relative_humidity_from_specific_humidity(
         input_era5["air_pressure"] * units.Pa,
         units.Quantity(input_era5["air_temperature"], "K"),
-        np.flip(np.mean(mod_data["q"][index, :, :, :107], axis=(1, 2))),
+        np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)))[:107],
     ).magnitude
-    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :107], axis=(1, 2)))
+    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2)))[:107]
     mxr = metpy.calc.mixing_ratio_from_relative_humidity(
         units.Quantity(input_era5["air_pressure"], "Pa"),
         units.Quantity(input_era5["air_temperature"], "K"),
