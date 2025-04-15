@@ -62,23 +62,29 @@ def prepare_radiosonde(rs_data: nc.Dataset) -> dict:
     return input_rs
 
 
-def prepare_vaisala(vs_data: nc.Dataset) -> dict:
+def prepare_vaisala(vs_data: nc.Dataset, altitude: float) -> dict:
     input_vs: dict = {}
     sa = nc.Dataset(
         os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         + "/tests/data/standard_atmospheres.nc"
     )
     geopotential = units.Quantity(vs_data.variables["alt"][:] * con.g0, "m^2/s^2")
-    input_vs["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
+    input_vs["height"] = (
+        metpy.calc.geopotential_to_height(geopotential[:]).magnitude - 20.0
+    )
     ind_sa = np.where(sa.variables["height"][:] * 1000.0 > 15000.0)[0]
+    ind_vs = int(np.where(input_vs["height"][0, :] > altitude)[0][0])
+    if input_vs["height"][0, ind_vs] - altitude > 100.0:
+        raise ValueError(f"Radiosonde data too high for altitude {altitude}. ")
     input_vs["height"] = np.append(
-        input_vs["height"][0, 0:2800], sa.variables["height"][ind_sa] * 1000.0
+        input_vs["height"][0, ind_vs:2800], sa.variables["height"][ind_sa] * 1000.0
     )
     input_vs["air_temperature"] = np.append(
-        vs_data.variables["ta"][0, 0:2800], sa.variables["t_atmo"][ind_sa, 0]
+        vs_data.variables["ta"][0, ind_vs:2800], sa.variables["t_atmo"][ind_sa, 0]
     )
     input_vs["air_pressure"] = np.append(
-        vs_data.variables["p"][0, 0:2800], sa.variables["p_atmo"][ind_sa, 0] * 100.0
+        vs_data.variables["p"][0, ind_vs:2800],
+        sa.variables["p_atmo"][ind_sa, 0] * 100.0,
     )
     rh = q2rh(
         sa.variables["q_atmo"][ind_sa, 0] * 1000.0,
@@ -86,7 +92,7 @@ def prepare_vaisala(vs_data: nc.Dataset) -> dict:
         sa.variables["p_atmo"][ind_sa, 0] * 100.0,
     )
     input_vs["relative_humidity"] = np.append(
-        vs_data.variables["rh"][0, 0:2800] / 100.0, rh
+        vs_data.variables["rh"][0, ind_vs:2800] / 100.0, rh
     )
     input_vs["time"] = seconds_since_epoch(
         vs_data.date_YYYYMMDDTHHMM[0:8] + vs_data.date_YYYYMMDDTHHMM[9:11]
@@ -135,30 +141,60 @@ def prepare_icon(icon_data: nc.Dataset, index: int, date_i: str) -> dict:
     return input_icon
 
 
-def prepare_era5(mod_data: nc.Dataset, index: int, date_i: str) -> dict:
+def prepare_era5_mod(
+    mod_data_sfc: nc.Dataset, mod_data_pro: nc.Dataset, index: int, date_i: str
+) -> dict:
     input_era5: dict = {}
     geopotential, input_era5["air_pressure"] = era5_geopot(
-        mod_data["level"][:],
-        np.mean(np.exp(mod_data["lnsp"][index, 0, :, :]), axis=(0, 1)),
-        np.mean(mod_data["z"][index, 0, :, :], axis=(0, 1)),
-        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2)),
-        np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)),
+        mod_data_pro["model_level"][:],
+        np.mean(np.exp(mod_data_sfc["lnsp"][index, 0, :, :]), axis=(0, 1)),
+        np.mean(mod_data_sfc["z"][index, 0, :, :], axis=(0, 1)),
+        np.mean(mod_data_pro["t"][index, :, :, :], axis=(1, 2)),
+        np.mean(mod_data_pro["q"][index, :, :, :], axis=(1, 2)),
     )
     geopotential = units.Quantity(geopotential, "m^2/s^2")
     input_era5["height"] = metpy.calc.geopotential_to_height(geopotential[:]).magnitude
-    input_era5["height"] = input_era5["height"][:107]
-    input_era5["air_pressure"] = input_era5["air_pressure"][:107]
     input_era5["air_temperature"] = np.flip(
-        np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))
-    )[:107]
+        np.mean(mod_data_pro["t"][index, :, :, :], axis=(1, 2))
+    )[:]
     input_era5[
         "relative_humidity"
     ] = metpy.calc.relative_humidity_from_specific_humidity(
         input_era5["air_pressure"] * units.Pa,
         units.Quantity(input_era5["air_temperature"], "K"),
-        np.flip(np.mean(mod_data["q"][index, :, :, :], axis=(1, 2)))[:107],
+        np.flip(np.mean(mod_data_pro["q"][index, :, :, :], axis=(1, 2)))[:],
     ).magnitude
-    clwc = np.flip(np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2)))[:107]
+    clwc = np.flip(np.mean(mod_data_pro["clwc"][index, :, :, :], axis=(1, 2)))[:]
+    mxr = metpy.calc.mixing_ratio_from_relative_humidity(
+        units.Quantity(input_era5["air_pressure"], "Pa"),
+        units.Quantity(input_era5["air_temperature"], "K"),
+        units.Quantity(input_era5["relative_humidity"], "dimensionless"),
+    )
+    rho = metpy.calc.density(
+        units.Quantity(input_era5["air_pressure"], "Pa"),
+        units.Quantity(input_era5["air_temperature"], "K"),
+        mxr,
+    )
+    input_era5["lwc"] = clwc * rho.magnitude
+    input_era5["time"] = seconds_since_epoch(date_i)
+
+    return input_era5
+
+
+def prepare_era5_pres(mod_data: nc.Dataset, index: int, date_i: str) -> dict:
+    input_era5: dict = {}
+    geopotential = np.mean(mod_data["z"][index, :, :, :], axis=(1, 2))[:]
+    input_era5["height"] = metpy.calc.geopotential_to_height(
+        units.Quantity(geopotential, "m^2/s^2")
+    ).magnitude
+    input_era5["air_pressure"] = mod_data["pressure_level"][:] * 100.0
+    input_era5["air_temperature"] = np.mean(mod_data["t"][index, :, :, :], axis=(1, 2))[
+        :
+    ]
+    input_era5["relative_humidity"] = (
+        np.mean(mod_data["r"][index, :, :, :], axis=(1, 2))[:] / 100.0
+    )
+    clwc = np.mean(mod_data["clwc"][index, :, :, :], axis=(1, 2))[:]
     mxr = metpy.calc.mixing_ratio_from_relative_humidity(
         units.Quantity(input_era5["air_pressure"], "Pa"),
         units.Quantity(input_era5["air_temperature"], "K"),

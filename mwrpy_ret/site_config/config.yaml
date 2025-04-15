@@ -81,3 +81,4 @@ global_specs:
   model: R24
   corr: Without bandwidth correction
   cloud: Cloudy cases excluded
+  era5: pressure
