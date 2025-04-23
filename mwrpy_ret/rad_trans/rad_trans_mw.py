@@ -151,7 +151,7 @@ def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
     Calculate optical thickness tau at height k (index counting from bottom of zgrid)
     """
     mu = MU_CALC(z, T, p, rhow, theta)
-    deltaz = np.diff(np.hstack([0.0, z * 1.0 / mu]))
+    deltaz = np.diff(np.hstack([0.0, z * np.ma.divide(1.0, mu)]))
 
     abs_wv = np.array(
         [

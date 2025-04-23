@@ -9,7 +9,8 @@ import numpy as np
 from mwrpy_ret import ret_mwr
 from mwrpy_ret.era5_download.get_era5 import era5_request
 from mwrpy_ret.prepare_input import (
-    prepare_era5,
+    prepare_era5_mod,
+    prepare_era5_pres,
     prepare_icon,
     prepare_ifs,
     prepare_radiosonde,
@@ -65,6 +66,7 @@ def process_input(
     params: dict,
 ) -> dict:
     data_nc: dict = {}
+    config = read_config(None, "global_specs")
     if source == "ifs":
         for date in date_range(start_date, stop_date):
             data_in = (
@@ -127,7 +129,7 @@ def process_input(
                                 f"Radiative transfer using {source} data "
                                 f"for {site}, {date.strftime('%Y%m%d')}"
                             )
-                        input_vs = prepare_vaisala(vs_data)
+                        input_vs = prepare_vaisala(vs_data, params["altitude"])
                         input_vs["height"] -= params["altitude"]
                     try:
                         output_hour = call_rad_trans(input_vs, params)
@@ -137,26 +139,77 @@ def process_input(
                     for key, array in output_hour.items():
                         data_nc = append_data(data_nc, key, array)
 
-    elif source == "era5":
-        file_name = (
-            params["data_era5"]
-            + site
-            + "_era5_input_"
-            + start_date.strftime("%Y%m%d")
-            + "_"
-            + stop_date.strftime("%Y%m%d")
-            + ".nc"
-        )
-        if os.path.isfile(file_name):
-            with nc.Dataset(file_name) as era5_data:
-                for index, hour in enumerate(era5_data["time"]):
-                    date_i = seconds2date(hour * 3600.0, (1900, 1, 1))
+    elif source == "era5" and config["era5"][:] == "model":
+        file_names = np.array([], dtype=str)
+        for f_type in ("sfc", "pro"):
+            if (stop_date - start_date).total_seconds() == 0.0:
+                file_names = np.append(
+                    file_names,
+                    get_file_list(
+                        params["data_era5"],
+                        site + f"_era5_input_{f_type}_" + start_date.strftime("%Y%m%d"),
+                    ),
+                )
+            else:
+                file_names = np.append(
+                    file_names,
+                    get_file_list(
+                        params["data_era5"],
+                        site
+                        + f"_era5_input_{f_type}_"
+                        + start_date.strftime("%Y%m%d")
+                        + "_"
+                        + stop_date.strftime("%Y%m%d"),
+                    ),
+                )
+        if len(file_names) == 2:
+            with (
+                nc.Dataset(str(np.sort(file_names)[0])) as era5_data_pro,
+                nc.Dataset(str(np.sort(file_names)[1])) as era5_data_sfc,
+            ):
+                for index, hour in enumerate(era5_data_sfc["valid_time"]):
+                    date_i = seconds2date(hour, (1970, 1, 1))
                     if date_i[-2:] == "00":
                         logging.info(
                             f"Radiative transfer using {source} data "
                             f"for {site}, {date_i[:-2]}"
                         )
-                    input_era5 = prepare_era5(era5_data, index, date_i)
+                    input_era5 = prepare_era5_mod(
+                        era5_data_sfc, era5_data_pro, index, date_i
+                    )
+                    try:
+                        output_hour = call_rad_trans(input_era5, params)
+                    except ValueError:
+                        logging.info(f"Skipping time {date_i}")
+                        continue
+                    for key, array in output_hour.items():
+                        data_nc = append_data(data_nc, key, array)
+
+    elif source == "era5" and config["era5"][:] == "pressure":
+        if (stop_date - start_date).total_seconds() == 0.0:
+            file_name = get_file_list(
+                params["data_era5"],
+                site + "_era5_input_pres_" + start_date.strftime("%Y%m%d"),
+            )
+        else:
+            file_name = get_file_list(
+                params["data_era5"],
+                site
+                + "_era5_input_pres_"
+                + start_date.strftime("%Y%m%d")
+                + "_"
+                + stop_date.strftime("%Y%m%d"),
+            )
+        if len(file_name) == 1:
+            with (nc.Dataset(str(np.sort(file_name)[0])) as era5_data,):
+                for index, hour in enumerate(era5_data["valid_time"]):
+                    date_i = seconds2date(hour, (1970, 1, 1))
+                    if date_i[-2:] == "00":
+                        logging.info(
+                            f"Radiative transfer using {source} data "
+                            f"for {site}, {date_i[:-2]}"
+                        )
+                    input_era5 = prepare_era5_pres(era5_data, index, date_i)
                     try:
                         output_hour = call_rad_trans(input_era5, params)
                     except ValueError:

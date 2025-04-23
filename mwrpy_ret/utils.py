@@ -52,7 +52,7 @@ def get_processing_dates(args) -> tuple[str, str]:
     """Returns processing dates."""
     if args.date is not None:
         start_date = args.date
-        stop_date = get_date_from_past(-1, start_date)
+        stop_date = start_date
     else:
         start_date = args.start
         stop_date = args.stop
@@ -67,7 +67,7 @@ def _get_filename(
     params = read_config(site, "params")
     if site == "standard_atmosphere":
         filename = f"{site}.nc"
-    elif (stop - start).total_seconds() / 3600.0 == 24.0:
+    elif (stop - start).total_seconds() == 0.0:
         filename = f"{site}_{source}_{start.strftime('%Y%m%d')}.nc"
     else:
         filename = (
@@ -85,6 +85,8 @@ def date_range(
     start_date: datetime.date, end_date: datetime.date
 ) -> Iterator[datetime.date]:
     """Returns range between two dates (datetimes)."""
+    if start_date == end_date:
+        end_date += datetime.timedelta(days=1)
     for n in range(int((end_date - start_date).days)):
         yield start_date + datetime.timedelta(n)
 

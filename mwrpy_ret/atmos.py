@@ -359,7 +359,7 @@ def era5_geopot(level, ps, gpot, temp, hum) -> tuple[np.ndarray, np.ndarray]:
     p_h = a_cf + b_cf * ps
     pres = (p_h + np.roll(p_h, 1, axis=0))[1:] / 2
 
-    for lev in sorted(level, reverse=True):
+    for lev in sorted(level.astype(int), reverse=True):
         i_z = np.where(level == lev)[0]
         p_l = a_cf[lev - 1] + (b_cf[lev - 1] * ps)
         p_lp = a_cf[lev] + (b_cf[lev] * ps)
