@@ -16,8 +16,6 @@ def calc_mw_rt(
     f,  # frequency vector in GHz
     coeff_bdw: dict,
     ape_ang: np.ndarray,
-    tau_k: np.ndarray | None = None,
-    tau_v: np.ndarray | None = None,
 ):
     """
     non-scattering microwave radiative transfer
@@ -28,26 +26,33 @@ def calc_mw_rt(
         and np.sum((LWC[1:] + LWC[:-1]) / 2.0 * np.diff(z_final)) > 0.001
         or np.any(np.ma.array(T_final).mask)
     ):
-        return (
-            np.ones(len(f), np.float32) * -999.0,
-            np.ones(len(f), np.float32) * -999.0,
-            np.ones(len(f), np.float32) * -999.0,
-        )
-    tau = np.ones((len(f), len(T_final)), np.float32) * -999.0
+        return np.ones(len(f), np.float32) * -999.0
+
     if config["corr"].split()[0] == "Without":
-        # Calculate optical thickness and TB
-        for ind, freq in enumerate(f):
-            tau[ind, :] = TAU_CALC(
-                z_final, T_final, p_final, q_final, LWC, freq, config["model"], theta
-            )
-        TB = TB_CALC(f, T_final, tau[:, :])
+        # No bandwidth/beamwidth correction
+        tau = np.array(
+            [
+                TAU_CALC(
+                    z_final,
+                    T_final,
+                    p_final,
+                    q_final,
+                    LWC,
+                    freq,
+                    config["model"],
+                    theta,
+                )
+                for _, freq in enumerate(f)
+            ],
+            np.float32,
+        )
+        TB = TB_CALC(f, T_final, tau)
 
     else:
-        # Calculate optical thickness
-        if tau_k is None:
-            tau_k = np.ones((len(f[:7]), len(T_final)), np.float32) * -999.0
-            for ind, freq in enumerate(f[:7]):
-                tau_k[ind, :] = TAU_CALC(
+        # With bandwidth/beamwidth correction
+        tau_k = np.array(
+            [
+                TAU_CALC(
                     z_final,
                     T_final,
                     p_final,
@@ -57,12 +62,13 @@ def calc_mw_rt(
                     config["model"],
                     theta,
                 )
-        if tau_v is None:
-            tau_v = (
-                np.ones((len(coeff_bdw["f_all"]), len(T_final)), np.float32) * -999.0
-            )
-            for ind, freq in enumerate(coeff_bdw["f_all"]):
-                tau_v[ind, :] = TAU_CALC(
+                for ind, freq in enumerate(f[:7])
+            ],
+            np.float32,
+        )
+        tau_v = np.array(
+            [
+                TAU_CALC(
                     z_final,
                     T_final,
                     p_final,
@@ -72,13 +78,15 @@ def calc_mw_rt(
                     config["model"],
                     theta,
                 )
+                for ind, freq in enumerate(coeff_bdw["f_all"])
+            ],
+            np.float32,
+        )
 
-        # Calculate TB
-        TB = np.empty(len(f), np.float32)
-        # Antenna beamwidth
         ape_wgh = GAUSS(ape_ang + theta, theta)
         ape_wgh = ape_wgh / np.sum(ape_wgh)
         ape_0 = ape_wgh[0] if "beamwidth" in config["corr"] else 1.0
+        TB = np.empty(len(f), np.float32)
         TB_k = TB_CALC(f[:7], T_final, tau_k) * ape_0
         for ff in range(7):
             fr_wgh = coeff_bdw["bdw_wgh"][
@@ -139,20 +147,13 @@ def calc_mw_rt(
             TB[ff + 7] = np.sum(TB_v)
         TB[:7] = np.sum(TB_k, axis=0) if "beamwidth" in config["corr"] else TB_k
 
-    return (
-        TB,  # [K] brightness temperature array of f grid
-        tau[:7, :],  # total optical depth (K-band)
-        tau[7:, :],  # total optical depth (V-band, incl. bandwidth)
-    )
+    return TB
 
 
 def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
     """
     Calculate optical thickness tau at height k (index counting from bottom of zgrid)
     """
-    mu = MU_CALC(z, T, p, rhow, theta)
-    deltaz = np.diff(np.hstack([0.0, z * np.ma.divide(1.0, mu)]))
-
     abs_wv = np.array(
         [
             eval(f"calc_absorption.ABWV_{model}")(
@@ -188,6 +189,8 @@ def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
         np.float32,
     )
 
+    mu = MU_CALC(z, T, p, rhow, theta)
+    deltaz = np.diff(np.hstack([0.0, z * np.ma.divide(1.0, mu)]))
     _, tau_wv = exponential_integration(True, abs_wv, deltaz, 1, len(T), 1)
     _, tau_dry = exponential_integration(True, abs_o2 + abs_n2, deltaz, 1, len(T), 1)
     _, tau_liq = exponential_integration(False, abs_liq, deltaz, 1, len(T), 1)
@@ -202,12 +205,7 @@ def MU_CALC(
     rhow,  # abs. hum. [kg m^-3]
     theta,  # zenith angle [deg]
 ):
-    mu = np.zeros(len(z), np.float64)
-    deltas = np.zeros(len(z) - 1, np.float64)
     coeff = [77.695, 71.97, 3.75406]
-    re = 6370950.0 + z[0]
-    theta_bot = np.deg2rad(theta)
-    r_bot = re
     T_top = (T[1:] + T[:-1]) / 2.0
     p_top = (p[1:] + p[:-1]) / 2.0
     e_top = (rhow[1:] + rhow[:-1]) / 2.0
@@ -230,22 +228,21 @@ def MU_CALC(
         )
         * 1e-6
     )
+
     deltaz = np.diff(z)
-
-    for iz in range(len(z) - 1):
-        r_top = r_bot + deltaz[iz]
-        theta_top = np.arcsin(
-            ((n_bot[iz] * r_bot) / (n_top[iz] * r_top)) * np.sin(theta_bot)
+    r_bot = 6370950.0 + z[0] + np.hstack((0.0, deltaz[:-1]))
+    r_top = r_bot + deltaz
+    theta_bot = np.zeros(len(z) - 1, np.float32)
+    theta_bot[0] = np.deg2rad(theta)
+    for iz in range(len(z) - 2):
+        theta_bot[iz + 1] = np.arcsin(
+            ((n_bot[iz] * r_bot[iz]) / (n_top[iz] * r_top[iz])) * np.sin(theta_bot[iz])
         )
-        alpha = np.pi - theta_bot
-        deltas[iz] = r_bot * np.cos(alpha) + np.sqrt(
-            r_top**2.0 + r_bot**2.0 * (np.cos(alpha) ** 2.0 - 1.0)
-        )
-        mu[iz + 1] = deltaz[iz] / deltas[iz]
-        theta_bot = theta_top
-        r_bot = r_top
-
-    return mu
+    alpha = np.pi - theta_bot
+    deltas = r_bot * np.cos(alpha) + np.sqrt(
+        r_top**2.0 + r_bot**2.0 * (np.cos(alpha) ** 2.0 - 1.0)
+    )
+    return np.hstack((0.0, deltaz / deltas))
 
 
 def TB_CALC(frq: np.ndarray, t: np.ndarray, taulay: np.ndarray) -> np.ndarray:
@@ -254,21 +251,19 @@ def TB_CALC(frq: np.ndarray, t: np.ndarray, taulay: np.ndarray) -> np.ndarray:
     """
 
     hvk = np.dot(frq * 1e9, con.h) / con.kB
+    tauprof = np.cumsum(taulay, axis=1)
+    boft = 1.0 / (
+        np.exp(np.broadcast_to(np.expand_dims(hvk, axis=1), taulay.shape) / t) - 1.0
+    )
+    boftlay = (boft[:, :-1] + boft[:, 1:] * np.exp(-taulay[:, 1:])) / (
+        1.0 + np.exp(-taulay[:, 1:])
+    )
+    batmlay = boftlay * np.exp(-tauprof[:, :-1]) * (1.0 - np.exp(-taulay[:, 1:]))
+    boftatm = np.hstack(
+        (np.zeros((len(frq), 1), np.float32), np.cumsum(batmlay, axis=1))
+    )
+
     nl = len(t)
-    tauprof = np.zeros(taulay.shape, np.float64)
-    boftatm = np.zeros(taulay.shape, np.float64)
-    boft = np.zeros(taulay.shape, np.float64)
-
-    boft[:, 0] = 1.0 / (np.exp(hvk / t[0]) - 1.0)
-    for i in range(1, nl):
-        boft[:, i] = 1.0 / (np.exp(hvk / t[i]) - 1.0)
-        boftlay = (boft[:, i - 1] + boft[:, i] * np.exp(-taulay[:, i])) / (
-            1.0 + np.exp(-taulay[:, i])
-        )
-        batmlay = boftlay * np.exp(-tauprof[:, i - 1]) * (1.0 - np.exp(-taulay[:, i]))
-        boftatm[:, i] = boftatm[:, i - 1] + batmlay
-        tauprof[:, i] = tauprof[:, i - 1] + taulay[:, i]
-
     i_g = np.where(tauprof[:, nl - 1] >= 125.0)[0]
     i_l = np.where(tauprof[:, nl - 1] < 125.0)[0]
     boftotl = np.zeros(len(frq))

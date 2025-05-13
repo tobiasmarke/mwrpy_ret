@@ -73,7 +73,7 @@ def process_input(
                 params["data_ifs"] + date.strftime("%Y/") + date.strftime("%Y%m%d")
             )
             file_name = get_file_list(data_in, "ecmwf")
-            if os.path.isfile(file_name[0]):
+            if len(file_name) == 1:
                 with nc.Dataset(file_name[0]) as ifs_data:
                     for index, hour in enumerate(ifs_data["time"][:-1]):
                         date_i = datetime.datetime.combine(
