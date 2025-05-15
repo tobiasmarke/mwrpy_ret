@@ -1,3 +1,8 @@
+## 0.7.3 – 2025-05-15
+
+- Change propagation scheme and add option for refractivity
+- Remove separated tau calculation
+
 ## 0.7.2 – 2025-04-23
 
 - Update ERA5
