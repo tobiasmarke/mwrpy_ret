@@ -27,11 +27,14 @@ def rad_trans(
         input_dat["absolute_humidity"] = abs_hum(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
-    e = calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
-    if "iwv" in input_dat:
-        iwv = input_dat["iwv"].data
-    else:
-        iwv = (
+    e = (
+        calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
+        * 1000.0
+    )
+    iwv = (
+        input_dat["iwv"].data
+        if "iwv" in input_dat
+        else (
             hum_to_iwv(
                 input_dat["absolute_humidity"][:],
                 input_dat["height"][:],
@@ -39,53 +42,47 @@ def rad_trans(
             if not np.any(input_dat["absolute_humidity"].mask)
             else -999.0
         )
+    )
 
     # Cloud geometry [m] / cloud water content (LWC, LWP)
     cloud_methods = ("prognostic", "detected") if "lwc" in input_dat else ["detected"]
     for method in cloud_methods:
-        tb_tmp = np.ones((len(params["frequency"]), len(theta)), np.float32) * -999.0
-        if method == "prognostic":
-            top, base = detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
-        else:
-            top, base = detect_liq_cloud(
-                input_dat["height"][:],
-                input_dat["air_temperature"][:],
-                input_dat["relative_humidity"][:],
-                input_dat["air_pressure"][:],
-            )
-        if len(top) in np.linspace(1, 15, 15):
-            lwc, lwp_tmp = get_cloud_prop(base, top, input_dat, method)
-        else:
-            lwc = np.zeros(len(input_dat["height"][:]), np.float32)
-            lwp_tmp = 0.0
-
-        # Radiative transport
-        tb_tmp[:, 0], tau_k, tau_v = calc_mw_rt(
-            input_dat["height"][:],
-            input_dat["air_temperature"][:],
-            input_dat["air_pressure"][:],
-            e,
-            lwc,
-            theta[0],
-            np.array(params["frequency"]),
-            coeff_bdw,
-            ape_ang,
-        )
-        if len(theta) > 1:
-            for i_ang, ang in enumerate(theta[1:]):
-                tb_tmp[:, i_ang + 1], _, _ = calc_mw_rt(
+        top, base = (
+            detect_cloud_mod(input_dat["height"][:], input_dat["lwc"][:])
+            if method == "prognostic"
+            else (
+                detect_liq_cloud(
                     input_dat["height"][:],
                     input_dat["air_temperature"][:],
+                    input_dat["relative_humidity"][:],
                     input_dat["air_pressure"][:],
+                )
+            )
+        )
+        lwc, lwp_tmp = (
+            get_cloud_prop(base, top, input_dat, method)
+            if len(top) in np.linspace(1, 15, 15)
+            else (np.zeros(len(input_dat["height"][:]), np.float32), 0.0)
+        )
+
+        # Radiative transport
+        tb_tmp = np.array(
+            [
+                calc_mw_rt(
+                    input_dat["height"][:],
+                    input_dat["air_temperature"][:],
+                    input_dat["air_pressure"][:] / 100.0,
                     e,
                     lwc,
                     ang,
                     np.array(params["frequency"]),
                     coeff_bdw,
                     ape_ang,
-                    tau_k,
-                    tau_v,
                 )
+                for _, ang in enumerate(theta)
+            ],
+            np.float32,
+        )
         if method == "prognostic":
             lwp_pro, tb_pro = lwp_tmp, tb_tmp
         else:

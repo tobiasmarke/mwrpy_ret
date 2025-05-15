@@ -80,5 +80,6 @@ global_specs:
   title:
   model: R24
   corr: Without bandwidth correction
+  refrac: Rueeger2002
   cloud: Cloudy cases excluded
   era5: pressure
