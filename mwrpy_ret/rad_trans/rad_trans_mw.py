@@ -6,7 +6,7 @@ from mwrpy_ret.utils import GAUSS, exponential_integration, read_config
 
 
 def calc_mw_rt(
-    # [m] states grid of T_final [K], p_final [Pa], q_final [kgm^-3]
+    # [m] states grid of T_final [K], p_final [hPa], q_final [gm^-3]
     z_final,
     T_final,
     p_final,
@@ -39,7 +39,7 @@ def calc_mw_rt(
                     q_final,
                     LWC,
                     freq,
-                    config["model"],
+                    config,
                     theta,
                 )
                 for _, freq in enumerate(f)
@@ -59,7 +59,7 @@ def calc_mw_rt(
                     q_final,
                     LWC,
                     freq,
-                    config["model"],
+                    config,
                     theta,
                 )
                 for ind, freq in enumerate(f[:7])
@@ -75,7 +75,7 @@ def calc_mw_rt(
                     q_final,
                     LWC,
                     freq,
-                    config["model"],
+                    config,
                     theta,
                 )
                 for ind, freq in enumerate(coeff_bdw["f_all"])
@@ -150,33 +150,28 @@ def calc_mw_rt(
     return TB
 
 
-def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
+def TAU_CALC(z, T, p, rhow, LWC, f, config, theta):
     """
-    Calculate optical thickness tau at height k (index counting from bottom of zgrid)
+    Calculate optical thickness tau.
     """
+    model = config["model"]
     abs_wv = np.array(
         [
-            eval(f"calc_absorption.ABWV_{model}")(
-                rhow[ii] * 1000.0, TT, p[ii] / 100.0, f
-            )
-            / 1000.0
+            eval(f"calc_absorption.ABWV_{model}")(rhow[ii], TT, p[ii], f) / 1000.0
             for ii, TT in enumerate(T)
         ],
         np.float32,
     )
     abs_o2 = np.array(
         [
-            eval(f"calc_absorption.ABO2_{model}")(
-                TT, p[ii] / 100.0, rhow[ii] * 1000.0, f
-            )
-            / 1000.0
+            eval(f"calc_absorption.ABO2_{model}")(TT, p[ii], rhow[ii], f) / 1000.0
             for ii, TT in enumerate(T)
         ],
         np.float32,
     )
     abs_n2 = np.array(
         [
-            calc_absorption.ABN2_R(TT, p[ii] / 100.0 - rhow[ii] * 1000.0, f) / 1000.0
+            calc_absorption.ABN2_R(TT, p[ii] - rhow[ii], f) / 1000.0
             for ii, TT in enumerate(T)
         ],
         np.float32,
@@ -189,8 +184,13 @@ def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
         np.float32,
     )
 
-    mu = MU_CALC(z, T, p, rhow, theta)
-    deltaz = np.diff(np.hstack([0.0, z * np.ma.divide(1.0, mu)]))
+    if not np.isclose(theta, 0.0, 1.0):
+        method = config["refrac"]
+        mu = eval(f"refractivity_{method}")(p, T, rhow)
+        deltaz = ray_tracing(z, mu, 90.0 - theta, z[0])
+    else:
+        deltaz = np.hstack([0.0, np.diff(z)])
+
     _, tau_wv = exponential_integration(True, abs_wv, deltaz, 1, len(T), 1)
     _, tau_dry = exponential_integration(True, abs_o2 + abs_n2, deltaz, 1, len(T), 1)
     _, tau_liq = exponential_integration(False, abs_liq, deltaz, 1, len(T), 1)
@@ -198,51 +198,149 @@ def TAU_CALC(z, T, p, rhow, LWC, f, model, theta):
     return tau_wv + tau_dry + tau_liq
 
 
-def MU_CALC(
-    z,  # height [m]
-    T,  # Temp. [K]
-    p,  # press. [Pa]
-    rhow,  # abs. hum. [kg m^-3]
-    theta,  # zenith angle [deg]
-):
-    coeff = [77.695, 71.97, 3.75406]
-    T_top = (T[1:] + T[:-1]) / 2.0
-    p_top = (p[1:] + p[:-1]) / 2.0
-    e_top = (rhow[1:] + rhow[:-1]) / 2.0
-    n_top = (
-        1.0
-        + (
-            coeff[0] * (((p_top / 100.0) - e_top) / T_top)
-            + coeff[1] * (e_top / T_top)
-            + coeff[2] * (e_top / (T_top**2.0))
-        )
-        * 1e-6
-    )
-    n_bot = n_top
-    n_bot[1:] = (
-        1.0
-        + (
-            coeff[0] * (((p_top[1:] / 100.0) - e_top[1:]) / T_top[1:])
-            + coeff[1] * (e_top[1:] / T_top[1:])
-            + coeff[2] * (e_top[1:] / (T_top[1:] ** 2.0))
-        )
-        * 1e-6
-    )
+def refractivity_Rueeger2002(p: np.ndarray, t: np.ndarray, e: np.ndarray) -> np.ndarray:
+    """Computes profile of refractive index.
+    Refractivity equations were taken from Rueeger 2002.
 
-    deltaz = np.diff(z)
-    r_bot = 6370950.0 + z[0] + np.hstack((0.0, deltaz[:-1]))
-    r_top = r_bot + deltaz
-    theta_bot = np.zeros(len(z) - 1, np.float32)
-    theta_bot[0] = np.deg2rad(theta)
-    for iz in range(len(z) - 2):
-        theta_bot[iz + 1] = np.arcsin(
-            ((n_bot[iz] * r_bot[iz]) / (n_top[iz] * r_top[iz])) * np.sin(theta_bot[iz])
+    These equations were intended for frequencies under 20 GHz
+
+    Args:
+        p (numpy.ndarray): Pressure profile (hPa).
+        t (numpy.ndarray): Temperature profile (K).
+        e (numpy.ndarray): Vapor pressure profile (hPa).
+
+    Returns:
+        refindx (numpy.ndarray): Refractive index profile
+    """
+    coeff = [77.695, 71.97, 3.75406]
+    N = (
+        1.0
+        + (
+            coeff[0] * (((p / 100.0) - e) / t)
+            + coeff[1] * (e / t)
+            + coeff[2] * (e / (t**2.0))
         )
-    alpha = np.pi - theta_bot
-    deltas = r_bot * np.cos(alpha) + np.sqrt(
-        r_top**2.0 + r_bot**2.0 * (np.cos(alpha) ** 2.0 - 1.0)
+        * 1e-6
     )
-    return np.hstack((0.0, deltaz / deltas))
+    return N
+
+
+def refractivity_Thayer1974(p: np.ndarray, t: np.ndarray, e: np.ndarray) -> np.ndarray:
+    """Computes profile of refractive index. Adapted from pyrtlib.
+    Refractivity equations were taken from [Thayer-1974]_.
+
+    These equations were intended for frequencies under 20 GHz
+
+    Args:
+        p (numpy.ndarray): Pressure profile (hPa).
+        t (numpy.ndarray): Temperature profile (K).
+        e (numpy.ndarray): Vapor pressure profile (hPa).
+
+    Returns:
+        refindx (numpy.ndarray): Refractive index profile
+    """
+    pa = p - e
+    tc = t - 273.16
+    rza = 1.0 + np.dot(
+        pa, (np.dot(5.79e-07, (1.0 + 0.52 / t)) - np.dot(0.00094611, tc) / t**2)
+    )
+    rzw = 1.0 + np.dot(
+        np.dot(1650.0, (e / (np.dot(t, t**2)))),
+        (
+            1.0
+            - np.dot(0.01317, tc)
+            + np.dot(0.000175, tc**2)
+            + np.dot(1.44e-06, (np.dot(tc**2, tc)))
+        ),
+    )
+    wetn = np.dot((np.dot(64.79, (e / t)) + np.dot(377600.0, (e / t**2))), rzw)
+    dryn = np.dot(np.dot(77.6036, (pa / t)), rza)
+
+    return 1.0 + np.dot((dryn + wetn), 1e-06)
+
+
+def ray_tracing(
+    z: np.ndarray, refindx: np.ndarray, angle: float, z0: float
+) -> np.ndarray:
+    """Ray-tracing algorithm of Dutton, Thayer, and Westwater, adapted from pyrtlib.
+
+    Args:
+        z (numpy.ndarray): Height profile (km above observation height, z0).
+        refindx (numpy.ndarray): Refractive index profile.
+        angle (float): Elevation angle (degrees).
+        z0 (float): Observation height (km msl).
+
+    Returns:
+        numpy.ndarray: Array containing slant path length profiles (km)
+
+    .. note::
+        The algorithm assumes that x decays exponentially over each layer.
+    """
+
+    deg2rad = np.pi / 180
+    re = 6370949.0
+    ds = np.zeros(z.shape)
+    nl = len(z)
+
+    # Convert angle degrees to radians.  Initialize constant values.
+    theta0 = np.dot(angle, deg2rad)
+    rs = re + z[0] + z0
+    costh0 = np.cos(theta0)
+    sina = np.sin(np.dot(theta0, 0.5))
+    a0 = np.dot(2.0, (sina**2))
+    # Initialize lower boundary values for 1st layer.
+    ds[0] = 0.0
+    phil = 0.0
+    taul = 0.0
+    rl = re + z[0] + z0
+    tanthl = np.tan(theta0)
+    # Construct the slant path length profile.
+    for i in range(1, nl):
+        r = re + z[i] + z0
+        if refindx[i] == refindx[i - 1] or refindx[i] == 1.0 or refindx[i - 1] == 1.0:
+            refbar = np.dot((refindx[i] + refindx[i - 1]), 0.5)
+        else:
+            refbar = 1.0 + (refindx[i - 1] - refindx[i]) / (
+                np.log((refindx[i - 1] - 1.0) / (refindx[i] - 1.0))
+            )
+        argdth = z[i] / rs - (np.dot((refindx[0] - refindx[i]), costh0) / refindx[i])
+        argth = np.dot(0.5, (a0 + argdth)) / r
+        if argth <= 0:
+            return ds
+        # Compute d-theta for this layer.
+        sint = np.sqrt(np.dot(r, argth))
+        theta = np.dot(2.0, np.arcsin(sint))
+        if (theta - np.dot(2.0, theta0)) <= 0.0:
+            dendth = np.dot(
+                np.dot(2.0, (sint + sina)), np.cos(np.dot((theta + theta0), 0.25))
+            )
+            sind4 = (np.dot(0.5, argdth) - np.dot(z[i], argth)) / dendth
+            dtheta = np.dot(4.0, np.arcsin(sind4))
+            theta = theta0 + dtheta
+        else:
+            dtheta = theta - theta0
+        # Compute d-tau for this layer (eq.3.71) and add to integral, tau.
+        tanth = np.tan(theta)
+        cthbar = np.dot(((1.0 / tanth) + (1.0 / tanthl)), 0.5)
+        dtau = np.dot(cthbar, (refindx[i - 1] - refindx[i])) / refbar
+        tau = taul + dtau
+        phi = dtheta + tau
+        ds[i] = np.sqrt(
+            (z[i] - z[i - 1]) ** 2
+            + np.dot(
+                np.dot(np.dot(4.0, r), rl), ((np.sin(np.dot((phi - phil), 0.5))) ** 2)
+            )
+        )
+        if dtau != 0.0:
+            dtaua = np.abs(tau - taul)
+            ds[i] = np.dot(ds[i], (dtaua / (np.dot(2.0, np.sin(np.dot(dtaua, 0.5))))))
+        # Make upper boundary into lower boundary for next layer.
+        phil = np.copy(phi)
+        taul = np.copy(tau)
+        rl = np.copy(r)
+        tanthl = np.copy(tanth)
+
+    return np.asarray(ds)
 
 
 def TB_CALC(frq: np.ndarray, t: np.ndarray, taulay: np.ndarray) -> np.ndarray:

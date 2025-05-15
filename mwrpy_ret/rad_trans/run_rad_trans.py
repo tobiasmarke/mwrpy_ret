@@ -27,7 +27,10 @@ def rad_trans(
         input_dat["absolute_humidity"] = abs_hum(
             input_dat["air_temperature"][:], input_dat["relative_humidity"][:]
         )
-    e = calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
+    e = (
+        calc_rho(input_dat["air_temperature"][:], input_dat["relative_humidity"][:])
+        * 1000.0
+    )
     iwv = (
         input_dat["iwv"].data
         if "iwv" in input_dat
@@ -68,7 +71,7 @@ def rad_trans(
                 calc_mw_rt(
                     input_dat["height"][:],
                     input_dat["air_temperature"][:],
-                    input_dat["air_pressure"][:],
+                    input_dat["air_pressure"][:] / 100.0,
                     e,
                     lwc,
                     ang,
