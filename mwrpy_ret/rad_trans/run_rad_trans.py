@@ -82,7 +82,7 @@ def rad_trans(
                 for _, ang in enumerate(theta)
             ],
             np.float32,
-        )
+        ).T
         if method == "prognostic":
             lwp_pro, tb_pro = lwp_tmp, tb_tmp
         else:
