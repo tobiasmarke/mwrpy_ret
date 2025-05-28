@@ -1,3 +1,7 @@
+## 0.7.4 – 2025-05-28
+
+- Fix for multi-angle arrays
+
 ## 0.7.3 – 2025-05-15
 
 - Change propagation scheme and add option for refractivity
