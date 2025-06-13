@@ -27,7 +27,7 @@ jobs:
         run: |
           version=${GITHUB_REF#refs/tags/v}
           sed "0,/^## ${version//./\\.}/d;/^## /,\$d" CHANGELOG.md > ${{ github.workspace }}-CHANGELOG.txt
-          echo "name=MWRpy_ret $version" >> $GITHUB_OUTPUT
+          echo "name=MWRpy_sim $version" >> $GITHUB_OUTPUT
         id: changelog
       - name: Create release
         uses: softprops/action-gh-release@v1
