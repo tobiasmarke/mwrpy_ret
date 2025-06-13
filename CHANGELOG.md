@@ -1,3 +1,7 @@
+## 0.7.5 – 2025-06-13
+
+- Rebrand to mwrpy_sim
+
 ## 0.7.4 – 2025-05-28
 
 - Fix for multi-angle arrays
