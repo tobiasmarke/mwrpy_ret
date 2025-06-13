@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-VERSION_FILE = "mwrpy_ret/version.py"
+VERSION_FILE = "mwrpy_sim/version.py"
 CHANGELOG_FILE = "CHANGELOG.md"
 
 
@@ -30,7 +30,7 @@ def main(component: str):
             )
     entry = _read_changelog(old_version)
     if not _confirm(
-        f"Updating mwrpy_ret version {old_version} -> {new_version}. Continue?"
+        f"Updating mwrpy_sim version {old_version} -> {new_version}. Continue?"
     ):
         return
     print(f"\nCurrent changelog entry in {CHANGELOG_FILE}:\n\n{entry}\n")
@@ -154,7 +154,7 @@ def _update_changelog(version: Version):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Bump mwrpy_ret version number.")
+    parser = argparse.ArgumentParser(description="Bump mwrpy_sim version number.")
     parser.add_argument(
         "component",
         choices=["major", "minor", "patch"],

@@ -1,15 +1,15 @@
-"""RpgArray Class"""
+"""SimArray Class"""
 from datetime import datetime, timezone
 
 import netCDF4
 import numpy as np
 
-from mwrpy_ret import utils, version
-from mwrpy_ret.utils import MetaData
+from mwrpy_sim import utils, version
+from mwrpy_sim.utils import MetaData
 
 
-class RetArray:
-    """Stores netCDF4 variables, numpy arrays and scalars as RetArrays.
+class SimArray:
+    """Stores netCDF4 variables, numpy arrays and scalars as SimArrays.
     Args:
         variable: The netCDF4 :class:`Variable` instance,
         numpy array (masked or regular), or scalar (float, int).
@@ -67,7 +67,7 @@ class RetArray:
                 return np.array(numeric_value)
             except ValueError:
                 pass
-        raise ValueError(f"Incorrect RetArray input: {self.variable}")
+        raise ValueError(f"Incorrect SimArray input: {self.variable}")
 
     def _init_units(self, units_from_user: str | None) -> str:
         if units_from_user is not None:
@@ -80,8 +80,8 @@ class RetArray:
         return "i4"
 
 
-class Ret:
-    """Base class for Ret MWR."""
+class Sim:
+    """Base class for Sim MWR."""
 
     def __init__(self, raw_data: dict):
         self.raw_data = raw_data
@@ -90,40 +90,40 @@ class Ret:
     def _init_data(self) -> dict:
         data = {}
         for key in self.raw_data:
-            data[key] = RetArray(self.raw_data[key], key)
+            data[key] = SimArray(self.raw_data[key], key)
         return data
 
 
-def save_rpg(ret: Ret, output_file: str, att: dict, source: str) -> None:
-    """Saves the Ret MWR file."""
+def save_sim(sim: Sim, output_file: str, att: dict, source: str) -> None:
+    """Saves the Sim MWR file."""
 
     dims = {
-        "time": len(ret.data["time"].data),
-        "frequency": len(ret.data["frequency"].data),
-        "height": len(ret.data["height"].data),
-        "height_input": ret.data["height_in"].data.shape[1],
-        "elevation_angle": len(ret.data["elevation_angle"].data),
+        "time": len(sim.data["time"].data),
+        "frequency": len(sim.data["frequency"].data),
+        "height": len(sim.data["height"].data),
+        "height_input": sim.data["height_in"].data.shape[1],
+        "elevation_angle": len(sim.data["elevation_angle"].data),
     }
 
-    with init_file(output_file, dims, ret.data, att) as rootgrp:
+    with init_file(output_file, dims, sim.data, att) as rootgrp:
         setattr(rootgrp, "source", source)
 
 
 def init_file(
-    file_name: str, dimensions: dict, rpg_arrays: dict, att_global: dict
+    file_name: str, dimensions: dict, sim_arrays: dict, att_global: dict
 ) -> netCDF4.Dataset:
-    """Initializes a Ret MWR file for writing.
+    """Initializes a Sim MWR file for writing.
     Args:
         file_name: File name to be generated.
         dimensions: Dictionary containing dimension for this file.
-        rpg_arrays: Dictionary containing :class:`RpgArray` instances.
+        sim_arrays: Dictionary containing :class:`SimArray` instances.
         att_global: Dictionary containing site specific global attributes
     """
 
     nc_file = netCDF4.Dataset(file_name, "w", format="NETCDF4_CLASSIC")
     for key, dimension in dimensions.items():
         nc_file.createDimension(key, dimension)
-    _write_vars2nc(nc_file, rpg_arrays)
+    _write_vars2nc(nc_file, sim_arrays)
     _add_standard_global_attributes(nc_file, att_global)
     return nc_file
 
@@ -142,7 +142,7 @@ def _get_dimensions(nc_file: netCDF4.Dataset, data: np.ndarray) -> tuple | tuple
 
 
 def _write_vars2nc(nc_file: netCDF4.Dataset, mwr_variables: dict) -> None:
-    """Iterates over RPG instances and write to netCDF file."""
+    """Iterates over instances and writes to netCDF file."""
 
     for obj in mwr_variables.values():
         if obj.data_type == "f4":
@@ -177,7 +177,7 @@ def _write_vars2nc(nc_file: netCDF4.Dataset, mwr_variables: dict) -> None:
 
 
 def _add_standard_global_attributes(nc_file: netCDF4.Dataset, att_global) -> None:
-    nc_file.mwrpy_ret_version = version.__version__
+    nc_file.mwrpy_sim_version = version.__version__
     nc_file.processed = (
         datetime.now(tz=timezone.utc).strftime("%d %b %Y %H:%M:%S") + " UTC"
     )

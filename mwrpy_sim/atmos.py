@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-import mwrpy_ret.constants as con
+import mwrpy_sim.constants as con
 
 
 def spec_heat(T: np.ndarray) -> np.ndarray:

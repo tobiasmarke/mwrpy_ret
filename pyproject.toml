@@ -1,6 +1,6 @@
 [project]
-name = "mwrpy_ret"
-description = "Repository for Microwave Radiometer Retrieval Derivation"
+name = "mwrpy_sim"
+description = "Repository for Simulating Microwave Radiometer Brightness Temperatures"
 authors = [{name = "Tobias Marke", email = "tobias.marke@uni-koeln.de"}]
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -30,9 +30,9 @@ dynamic = ["version"]
 test = ["mypy", "pre-commit", "pylint", "pysonde", "pytest", "pytest-flakefinder", "types-PyYAML", "types-pytz"]
 
 [project.urls]
-Homepage = "https://github.com/tobiasmarke/mwrpy_ret"
-Repository = "https://github.com/tobiasmarke/mwrpy_ret"
-Changelog = "https://github.com/tobiasmarke/mwrpy_ret/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/tobiasmarke/mwrpy_sim"
+Repository = "https://github.com/tobiasmarke/mwrpy_sim"
+Changelog = "https://github.com/tobiasmarke/mwrpy_sim/blob/main/CHANGELOG.md"
 
 [tool.mypy]
 check_untyped_defs = true
@@ -70,7 +70,7 @@ pattern = "version = \"(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)\""
 changelog = "CHANGELOG.md" # optional
 
 [tool.setuptools.dynamic]
-version = {attr = "mwrpy_ret.version.__version__"}
+version = {attr = "mwrpy_sim.version.__version__"}
 
 [tool.tomlsort]
 trailing_comma_inline_array = true

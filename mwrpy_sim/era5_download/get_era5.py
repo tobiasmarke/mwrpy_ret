@@ -3,7 +3,7 @@ import datetime
 import cdsapi
 import numpy as np
 
-from mwrpy_ret.utils import _get_filename, read_config
+from mwrpy_sim.utils import _get_filename, read_config
 
 
 def era5_request(

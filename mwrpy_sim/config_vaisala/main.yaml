@@ -1,0 +1,10 @@
+campaign: JOYCE
+campaign_id: JOYCE
+platform: juelich
+platform_number: 1
+location: JUE
+configs:
+  main: mwrpy_sim/config_vaisala/main.yaml # name of this file
+  level0: mwrpy_sim/config_vaisala/level0_mwx.yml
+  level1: mwrpy_sim/config_vaisala/level1.yaml
+  level2: mwrpy_sim/config_vaisala/level2.yaml

@@ -6,9 +6,9 @@ import time
 import netCDF4 as nc
 import numpy as np
 
-from mwrpy_ret import ret_mwr
-from mwrpy_ret.era5_download.get_era5 import era5_request
-from mwrpy_ret.prepare_input import (
+from mwrpy_sim import sim_mwr
+from mwrpy_sim.era5_download.get_era5 import era5_request
+from mwrpy_sim.prepare_input import (
     prepare_era5_mod,
     prepare_era5_pres,
     prepare_icon,
@@ -17,9 +17,9 @@ from mwrpy_ret.prepare_input import (
     prepare_standard_atmosphere,
     prepare_vaisala,
 )
-from mwrpy_ret.rad_trans.rad_trans_meta import get_data_attributes
-from mwrpy_ret.rad_trans.run_rad_trans import rad_trans
-from mwrpy_ret.utils import (
+from mwrpy_sim.rad_trans.rad_trans_meta import get_data_attributes
+from mwrpy_sim.rad_trans.run_rad_trans import rad_trans
+from mwrpy_sim.utils import (
     _get_filename,
     append_data,
     date_range,
@@ -50,10 +50,10 @@ def main(args):
             output_dir = os.path.dirname(output_file)
             if not os.path.isdir(output_dir):
                 os.makedirs(output_dir)
-            ret_in = ret_mwr.Ret(data_nc)
-            ret_in.data = get_data_attributes(ret_in.data, args.command)
+            sim_in = sim_mwr.Sim(data_nc)
+            sim_in.data = get_data_attributes(sim_in.data, args.command)
             logging.info(f"Saving output file {output_file}")
-            ret_mwr.save_rpg(ret_in, output_file, global_specs, args.command)
+            sim_mwr.save_sim(sim_in, output_file, global_specs, args.command)
     elapsed_time = time.process_time() - start
     logging.info(f"Processing took {elapsed_time:.1f} seconds")
 
@@ -282,8 +282,8 @@ def call_rad_trans(data_in: dict, params: dict) -> dict:
     return data_nc
 
 
-class RetIn:
-    """Class for retrieval input files"""
+class SimIn:
+    """Class for radiative transfer input files"""
 
     def __init__(self, data_in: dict):
         self.data: dict = {}

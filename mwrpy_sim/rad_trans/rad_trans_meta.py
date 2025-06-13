@@ -1,12 +1,12 @@
 """Module for Radiative Transfer Metadata"""
 
-from mwrpy_ret.utils import MetaData
+from mwrpy_sim.utils import MetaData
 
 
-def get_data_attributes(ret_variables: dict, source: str) -> dict:
-    """Adds Metadata for Ret MWR variables for NetCDF file writing.
+def get_data_attributes(sim_variables: dict, source: str) -> dict:
+    """Adds Metadata for Sim MWR variables for NetCDF file writing.
     Args:
-        ret_variables: RetArray instances.
+        sim_variables: SimArray instances.
         source: Data type of the netCDF file.
 
     Returns:
@@ -36,15 +36,15 @@ def get_data_attributes(ret_variables: dict, source: str) -> dict:
         )
     attributes = dict(ATTRIBUTES_COM, **ATTRIBUTES_SOURCE)
 
-    for key in list(ret_variables):
+    for key in list(sim_variables):
         if key in attributes:
-            ret_variables[key].set_attributes(attributes[key])
+            sim_variables[key].set_attributes(attributes[key])
         else:
-            del ret_variables[key]
+            del sim_variables[key]
 
     index_map = {v: i for i, v in enumerate(attributes)}
     ret_variables = dict(
-        sorted(ret_variables.items(), key=lambda pair: index_map[pair[0]])
+        sorted(sim_variables.items(), key=lambda pair: index_map[pair[0]])
     )
 
     return ret_variables
