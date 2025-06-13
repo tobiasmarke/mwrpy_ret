@@ -1,6 +1,6 @@
 import numpy as np
 
-from mwrpy_ret.atmos import (
+from mwrpy_sim.atmos import (
     abs_hum,
     calc_rho,
     detect_cloud_mod,
@@ -8,7 +8,7 @@ from mwrpy_ret.atmos import (
     get_cloud_prop,
     hum_to_iwv,
 )
-from mwrpy_ret.rad_trans import calc_mw_rt
+from mwrpy_sim.rad_trans import calc_mw_rt
 
 
 def rad_trans(

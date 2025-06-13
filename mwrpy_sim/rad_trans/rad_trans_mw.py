@@ -1,8 +1,8 @@
 import numpy as np
 
-import mwrpy_ret.constants as con
-from mwrpy_ret.rad_trans import calc_absorption
-from mwrpy_ret.utils import GAUSS, exponential_integration, read_config
+import mwrpy_sim.constants as con
+from mwrpy_sim.rad_trans import calc_absorption
+from mwrpy_sim.utils import GAUSS, exponential_integration, read_config
 
 
 def calc_mw_rt(

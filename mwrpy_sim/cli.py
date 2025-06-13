@@ -7,16 +7,16 @@ which adds the subcommand to the subparser.
 import argparse
 import sys
 
-from mwrpy_ret import process_mwrpy_ret, utils
+from mwrpy_sim import process_mwrpy_sim, utils
 
 
 def main(args):
     args = _parse_args(args)
-    process_mwrpy_ret.main(args)
+    process_mwrpy_sim.main(args)
 
 
 def _parse_args(args):
-    parser = argparse.ArgumentParser(description="MWRpy_ret processing main wrapper.")
+    parser = argparse.ArgumentParser(description="MWRpy_sim processing main wrapper.")
     parser.add_argument(
         "command",
         nargs="?",

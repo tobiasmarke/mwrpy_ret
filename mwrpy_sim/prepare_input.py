@@ -5,9 +5,9 @@ import netCDF4 as nc
 import numpy as np
 from metpy.units import units
 
-import mwrpy_ret.constants as con
-from mwrpy_ret.atmos import era5_geopot, moist_rho_rh, q2rh
-from mwrpy_ret.utils import seconds_since_epoch
+import mwrpy_sim.constants as con
+from mwrpy_sim.atmos import era5_geopot, moist_rho_rh, q2rh
+from mwrpy_sim.utils import seconds_since_epoch
 
 
 def prepare_ifs(ifs_data: nc.Dataset, index: int, date_i: str) -> dict:
